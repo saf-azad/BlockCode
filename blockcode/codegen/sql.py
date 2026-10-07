@@ -108,7 +108,14 @@ def emit_select(em: Emitter, plan: Plan) -> None:
             text = f"({text})"
         em.emit(("WHERE " if i == 0 else "  AND ") + text, w.id)
     if group and group.field("by"):
-        em.emit("GROUP BY " + ", ".join(sql_ident(k) for k in group.field("by", [])), group.id)
+        shown = set(plan.select.field("columns", [])) if plan.select else None
+        keys = []
+        for k in group.field("by", []):
+            d = derived.get(k)
+            # a new column used only for grouping isn't in the SELECT list, so repeat its sum
+            keys.append(pre(d.inputs.get("expr")) if d and shown is not None and k not in shown
+                        else sql_ident(k))
+        em.emit("GROUP BY " + ", ".join(keys), group.id)
     if plan.having:
         aggs = {a.get("as"): a for a in group.field("aggs", [])} if group else {}
 

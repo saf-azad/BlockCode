@@ -239,6 +239,18 @@ def build_plan(src: Block, tables: dict[str, TableInfo]) -> Plan:
 
     if not pre_group_set:
         plan.pre_group = dict(cols)
+    used = None
+    if plan.group is not None:
+        used = set(plan.group.field("by", [])) | {a.get("column") for a in
+                                                  plan.group.field("aggs", [])}
+    elif plan.select is not None:
+        used = set(plan.select.field("columns", []))
+    if used is not None:
+        for d in plan.derives:
+            if d.field("name") and d.field("name") not in used:
+                why = "Group by doesn't use" if plan.group is not None else "Select doesn't keep"
+                diags.append(warning(f'{d.field("name")} is worked out but {why} it, so it '
+                                     f"won't be in the result.", d.id))
     plan.post_group = dict(cols)
     plan.columns = cols
     return plan

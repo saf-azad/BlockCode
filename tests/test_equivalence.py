@@ -30,7 +30,17 @@ def has_order(program):
 
 def compare(store, project_name, program):
     project = store.load(project_name)
-    sql_cols, sql_rows = rows_of(run(store, project, program, "sql"))
+    sql = run(store, project, program, "sql")
+    if sql.ok and sql.tables and sql.tables[-1].total_rows > len(sql.tables[-1].rows) \
+            and not has_order(program):
+        # Only the first rows come back; fix the order so both sides return the same ones.
+        from blockcode import build as b
+
+        program = program.model_copy(deep=True)
+        steps = program.blocks[-1].stacks["steps"]
+        steps.append(b.order(*[(c, False) for c in sql.tables[-1].columns]))
+        sql = run(store, project, program, "sql")
+    sql_cols, sql_rows = rows_of(sql)
     py_cols, py_rows = rows_of(run(store, project, program, "python"))
     assert sql_cols == py_cols
     if has_order(program):
