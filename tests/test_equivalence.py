@@ -87,3 +87,18 @@ def test_r_without_rscript_explains(store, monkeypatch):
     project = store.load("school")
     result = run(store, project, school()["year_counts"], "r")
     assert not result.ok and result.error.kind == "NoR"
+
+
+@needs_r
+@pytest.mark.parametrize("name", list(pets()))
+def test_r_null_semantics_match_sql(store, name):
+    project = store.load("pets")
+    program = pets()[name]
+    sql_cols, sql_rows = rows_of(run(store, project, program, "sql"))
+    r_cols, r_rows = rows_of(run(store, project, program, "r"))
+    assert sql_cols == r_cols
+    if has_order(program):
+        assert sql_rows == r_rows
+    else:
+        key = lambda r: tuple((x is None, str(x)) for x in r)  # noqa: E731
+        assert sorted(sql_rows, key=key) == sorted(r_rows, key=key)

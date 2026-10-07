@@ -55,12 +55,16 @@ print.ggplot <- function(x, ...) {
 .bc_err <- NULL
 for (.bc_e in seq_along(.bc_exprs)) {
   .bc_line <- getSrcLocation(.bc_exprs[.bc_e], "line")
+  .bc_last <- getSrcLocation(.bc_exprs[.bc_e], "line", first = FALSE)
   .bc_ok <- tryCatch({
     .bc_v <- withVisible(eval(.bc_exprs[[.bc_e]], envir = globalenv()))
     if (.bc_v$visible) print(.bc_v$value)
     TRUE
   }, error = function(e) {
-    writeLines(c(as.character(.bc_line), conditionMessage(e)), file.path(.bc_out, "error.txt"))
+    cl <- conditionCall(e)
+    cl <- if (is.null(cl)) "" else paste(deparse(cl), collapse = " ")
+    writeLines(c(as.character(.bc_line), as.character(.bc_last), cl, conditionMessage(e)),
+               file.path(.bc_out, "error.txt"))
     FALSE
   })
   if (!.bc_ok) break
@@ -74,6 +78,26 @@ for (.bc_n in .bc_names) {
   }
 }
 ''' % {"max_rows": MAX_ROWS}
+
+
+def _error_line(code: list[str], first: int | None, last: int | None, call: str,
+                msg: str) -> int | None:
+    """R only tells us which top-level expression failed. Narrow it to the line that holds the
+    failing call, or the missing object's name."""
+    if first is None:
+        return None
+    span = range(first, (last or first) + 1)
+    needles = []
+    m = re.search(r"object '([^']+)' not found", msg)
+    if m:
+        needles.append(rf"(?<![\w.$]){re.escape(m.group(1))}(?![\w.])")
+    if call:
+        needles.append(re.escape(call.split("(")[0]) + r"\(")
+    for pat in needles:
+        for n in span:
+            if n <= len(code) and re.search(pat, code[n - 1]):
+                return n
+    return first
 
 
 def _cell(v: str):
@@ -115,9 +139,11 @@ def run_r(gen: Generated, project_dir: Path, names: list[str],
         err = tmpd / "error.txt"
         if err.exists():
             lines = err.read_text().splitlines()
-            local = int(lines[0]) if lines and lines[0].isdigit() else None
+            first = int(lines[0]) if lines and lines[0].isdigit() else None
+            last = int(lines[1]) if len(lines) > 1 and lines[1].isdigit() else first
+            call, msg = (lines[2] if len(lines) > 2 else ""), "\n".join(lines[3:])
+            local = _error_line(code.splitlines(), first, last, call, msg)
             line = nums[local - 1] if local and local <= len(nums) else None
-            msg = "\n".join(lines[1:])
             blocks = gen.blocks_at(line) if line else []
             result.ok = False
             result.error = RunError(kind="RError", message=friendly("RError", msg, "r"),
