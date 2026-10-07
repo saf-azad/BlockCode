@@ -1,0 +1,1033 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@400;600;700;800;900&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Space+Mono:wght@400;700&display=swap">
+<style>
+body{margin:0;background:#FDE8E8;color:#111111;font-family:'DM Sans',sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#111111;text-decoration:underline;text-underline-offset:3px}a:hover{color:#C42828}
+*{box-sizing:border-box}
+@keyframes popIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+</style>
+</helmet>
+
+<section data-screen-label="Design plan" style="padding:72px 64px 48px;max-width:1520px;display:flex;flex-direction:column;gap:40px">
+  <div style="display:flex;flex-direction:column;gap:18px">
+    <h1 style="margin:0;font-family:'League Spartan',sans-serif;font-weight:900;font-size:88px;line-height:.95;letter-spacing:-.01em;color:#111111;text-shadow:5px 5px 0 #ED7070">BlockCode</h1>
+    <p style="margin:0;max-width:680px;font-size:19px;line-height:1.6;color:#444444;text-wrap:pretty">Learners drop in a CSV, snap blocks together and read the real code live. The same blocks export as SQL, Python or R, and errors link back to the block that caused them.</p>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:24px">
+    <div style="background:#FFFFFF;border:2px solid #111111;border-radius:16px;box-shadow:6px 6px 0 #111111;padding:22px;display:flex;flex-direction:column;gap:12px">
+      <span style="width:38px;height:38px;border-radius:50%;background:#ED7070;border:2px solid #111111;display:flex;align-items:center;justify-content:center;font-family:'League Spartan',sans-serif;font-weight:800;font-size:17px">1</span>
+      <div style="font-family:'League Spartan',sans-serif;font-weight:800;font-size:21px;line-height:1.15">Blocks have no language</div>
+      <p style="margin:0;font-size:14px;line-height:1.6;color:#444444">Data blocks normalise into one relational plan. The language toggle changes the code tab; the workspace stays put.</p>
+    </div>
+    <div style="background:#FFFFFF;border:2px solid #111111;border-radius:16px;box-shadow:6px 6px 0 #111111;padding:22px;display:flex;flex-direction:column;gap:12px">
+      <span style="width:38px;height:38px;border-radius:50%;background:#ED7070;border:2px solid #111111;display:flex;align-items:center;justify-content:center;font-family:'League Spartan',sans-serif;font-weight:800;font-size:17px">2</span>
+      <div style="font-family:'League Spartan',sans-serif;font-weight:800;font-size:21px;line-height:1.15">Pick columns, don't type</div>
+      <p style="margin:0;font-size:14px;line-height:1.6;color:#444444">A dropped CSV becomes a source block in the toolbox. Its columns fill every dropdown.</p>
+    </div>
+    <div style="background:#FFFFFF;border:2px solid #111111;border-radius:16px;box-shadow:6px 6px 0 #111111;padding:22px;display:flex;flex-direction:column;gap:12px">
+      <span style="width:38px;height:38px;border-radius:50%;background:#ED7070;border:2px solid #111111;display:flex;align-items:center;justify-content:center;font-family:'League Spartan',sans-serif;font-weight:800;font-size:17px">3</span>
+      <div style="font-family:'League Spartan',sans-serif;font-weight:800;font-size:21px;line-height:1.15">Show where SQL ends</div>
+      <p style="margin:0;font-size:14px;line-height:1.6;color:#444444">Python-only blocks are dashed. Using one turns off SQL and puts the reason on the block.</p>
+    </div>
+    <div style="background:#FFFFFF;border:2px solid #111111;border-radius:16px;box-shadow:6px 6px 0 #111111;padding:22px;display:flex;flex-direction:column;gap:12px">
+      <span style="width:38px;height:38px;border-radius:50%;background:#ED7070;border:2px solid #111111;display:flex;align-items:center;justify-content:center;font-family:'League Spartan',sans-serif;font-weight:800;font-size:17px">4</span>
+      <div style="font-family:'League Spartan',sans-serif;font-weight:800;font-size:21px;line-height:1.15">Two-way linking</div>
+      <p style="margin:0;font-size:14px;line-height:1.6;color:#444444">Hovering a block highlights its lines and shows both forms. Clicking a problem highlights its block.</p>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:32px;align-items:start">
+    <div style="background:#FFFFFF;border:2px solid #111111;border-radius:16px;box-shadow:6px 6px 0 #111111;padding:28px;display:flex;flex-direction:column;gap:18px">
+      <div style="font-family:'League Spartan',sans-serif;font-weight:800;font-size:26px">Block families</div>
+      <div style="display:grid;grid-template-columns:210px minmax(0,1fr);gap:18px 20px;align-items:center">
+        <div style="background:#E04A4F;color:#111111;padding:11px 14px;border:2px solid #111111;border-radius:16px 16px 8px 8px;box-shadow:0 4px 0 #111111;font-family:'League Spartan',sans-serif;font-weight:700;font-size:15px">From enrolments</div>
+        <div style="font-size:14px;line-height:1.55;color:#444444"><b style="color:#111111">Source.</b> Rounded "hat" block, nothing stacks above it. One per CSV or table.</div>
+        <div style="background:#ED7070;color:#111111;padding:11px 14px;border:2px solid #111111;border-radius:8px;box-shadow:0 4px 0 #111111;font-family:'League Spartan',sans-serif;font-weight:700;font-size:15px">Where · Group by</div>
+        <div style="font-size:14px;line-height:1.55;color:#444444"><b style="color:#111111">Data steps.</b> SELECT, WHERE, JOIN, GROUP BY, HAVING, ORDER BY, LIMIT, new column. Compile to SQL and pandas.</div>
+        <div style="justify-self:start;background:#FAD0D0;color:#111111;padding:7px 16px;border:2px solid #111111;border-radius:999px;font-family:'Space Mono',monospace;font-size:13px">grade &gt; 50</div>
+        <div style="font-size:14px;line-height:1.55;color:#444444"><b style="color:#111111">Expressions.</b> Round pills for slots: column, literal, compare, and/or/not, maths, is empty, in list, contains.</div>
+        <div style="background:#FFFFFF;color:#111111;border:2px dashed #111111;padding:11px 14px;border-radius:8px;font-family:'League Spartan',sans-serif;font-weight:700;font-size:15px">For each · Print</div>
+        <div style="font-size:14px;line-height:1.55;color:#444444"><b style="color:#111111">Python only.</b> Variables, print, for, if/elif/else, while, lists. Can wrap a data pipeline.</div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:24px">
+      <div style="background:#FFFFFF;border:2px solid #111111;border-radius:16px;box-shadow:6px 6px 0 #111111;padding:28px;display:flex;flex-direction:column;gap:14px">
+        <div style="font-family:'League Spartan',sans-serif;font-weight:800;font-size:26px">Milestones that touch the UI</div>
+        <div style="display:flex;flex-direction:column;gap:10px;font-size:14px;line-height:1.5">
+          <div style="display:flex;gap:12px;align-items:baseline"><span style="flex:none;font-family:'Space Mono',monospace;font-weight:700;font-size:12px;background:#FAD0D0;border:1.5px solid #111111;border-radius:999px;padding:1px 9px">M3</span><span>Python blocks: dashed style, per-block SQL warnings</span></div>
+          <div style="display:flex;gap:12px;align-items:baseline"><span style="flex:none;font-family:'Space Mono',monospace;font-weight:700;font-size:12px;background:#FAD0D0;border:1.5px solid #111111;border-radius:999px;padding:1px 9px">M4</span><span>Editor: toolbox, workspace, Code tab with SQL ⇄ Python toggle, dual-form tooltips</span></div>
+          <div style="display:flex;gap:12px;align-items:baseline"><span style="flex:none;font-family:'Space Mono',monospace;font-weight:700;font-size:12px;background:#FAD0D0;border:1.5px solid #111111;border-radius:999px;padding:1px 9px">M5</span><span>CSV drop overlay, inferred types, column dropdowns</span></div>
+          <div style="display:flex;gap:12px;align-items:baseline"><span style="flex:none;font-family:'Space Mono',monospace;font-weight:700;font-size:12px;background:#FAD0D0;border:1.5px solid #111111;border-radius:999px;padding:1px 9px">M6</span><span>Run, Output tab (table + stdout), Problems tab, error ↔ block</span></div>
+          <div style="display:flex;gap:12px;align-items:baseline"><span style="flex:none;font-family:'Space Mono',monospace;font-weight:700;font-size:12px;background:#FAD0D0;border:1.5px solid #111111;border-radius:999px;padding:1px 9px">M7</span><span>Save / load, Export .sql or .py (+ data)</span></div>
+        </div>
+      </div>
+      <div style="background:#111111;color:#FDE8E8;border:2px solid #111111;border-radius:16px;box-shadow:6px 6px 0 #ED7070;padding:24px 28px;display:flex;flex-direction:column;gap:14px">
+        <div style="font-family:'League Spartan',sans-serif;font-weight:800;font-size:22px">Things the UI should point out</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;font-size:13px;color:#111111">
+          <span style="background:#FDE8E8;padding:5px 12px;border-radius:999px">Empty values counted on drop</span>
+          <span style="background:#FDE8E8;padding:5px 12px;border-radius:999px">"is empty" uses isna()</span>
+          <span style="background:#FDE8E8;padding:5px 12px;border-radius:999px">Dates stay text in v1</span>
+          <span style="background:#FDE8E8;padding:5px 12px;border-radius:999px">No ORDER BY means no fixed row order</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section data-screen-label="Block explainers" style="padding:0 64px 40px;max-width:1520px;display:flex;flex-direction:column;gap:18px">
+  <div style="display:flex;flex-direction:column;gap:8px">
+    <h2 style="margin:0;font-family:'League Spartan',sans-serif;font-weight:900;font-size:44px;letter-spacing:-.01em">Hover explainers</h2>
+    <p style="margin:0;max-width:680px;font-size:16px;line-height:1.6;color:#444444;text-wrap:pretty">Hovering a block in the workspace pops a small looping diagram next to it. Each cube is one row. All nine are playing here; colours follow the selected language.</p>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:20px">
+    <sc-for list="{{ gallery }}" as="g" hint-placeholder-count="9">
+      <div style="background:#FFFFFF;border:2px solid #111111;border-radius:14px;box-shadow:5px 5px 0 #111111;padding:14px 18px 18px;display:flex;flex-direction:column;gap:6px">
+        <div style="display:flex;justify-content:center">{{ g.diagram }}</div>
+        <span style="font-family:'League Spartan',sans-serif;font-weight:800;font-size:18px">{{ g.title }}</span>
+        <span style="font-size:13.5px;line-height:1.5;color:#444444">{{ g.cap }}</span>
+      </div>
+    </sc-for>
+  </div>
+</section>
+
+<section data-screen-label="Editor mockup" style="padding:24px 64px 64px;display:flex;flex-direction:column;gap:18px">
+  <h2 style="margin:0;font-family:'League Spartan',sans-serif;font-weight:900;font-size:44px;letter-spacing:-.01em">The editor</h2>
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <button onClick="{{ togglePy }}" style="font-family:'DM Sans',sans-serif;font-weight:600;font-size:13px;padding:7px 14px;border:2px solid #111111;background:#FFFFFF;border-radius:999px;cursor:pointer;color:#111111;box-shadow:2px 2px 0 #111111">{{ pyToggleLabel }}</button>
+    <button onClick="{{ toggleErr }}" style="font-family:'DM Sans',sans-serif;font-weight:600;font-size:13px;padding:7px 14px;border:2px solid #111111;background:#FFFFFF;border-radius:999px;cursor:pointer;color:#111111;box-shadow:2px 2px 0 #111111">{{ errToggleLabel }}</button>
+    <button onClick="{{ togglePlot }}" style="font-family:'DM Sans',sans-serif;font-weight:600;font-size:13px;padding:7px 14px;border:2px solid #111111;background:#FFFFFF;border-radius:999px;cursor:pointer;color:#111111;box-shadow:2px 2px 0 #111111">{{ plotToggleLabel }}</button>
+    <button onClick="{{ toggleDrop }}" style="font-family:'DM Sans',sans-serif;font-weight:600;font-size:13px;padding:7px 14px;border:2px solid #111111;background:#FFFFFF;border-radius:999px;cursor:pointer;color:#111111;box-shadow:2px 2px 0 #111111">{{ dropToggleLabel }}</button>
+    <span style="font-size:14px;color:#444444;margin-left:6px">Click a palette block to snap it into the stack, × removes it. Hover blocks, flip the language, press Run. Button set is in Tweaks.</span>
+  </div>
+
+  <div style="position:relative;width:1440px;height:860px;border:2.5px solid #111111;border-radius:18px;overflow:hidden;display:grid;grid-template-rows:38px 64px minmax(0,1fr);background:#FFFFFF;box-shadow:10px 10px 0 #111111">
+    <sc-if value="{{ erdOpen }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute;z-index:20;left:264px;top:118px;width:880px;background:#FFFFFF;border:2px solid #111111;border-left:0;border-radius:0 16px 16px 0;box-shadow:8px 8px 0 #111111;display:flex;flex-direction:column">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 16px 12px 22px;background:{{ th.c2 }};border-bottom:2px solid #111111">
+          <div style="display:flex;align-items:baseline;gap:12px"><span style="font-family:'League Spartan',sans-serif;font-weight:800;font-size:18px">Quick ERD</span><span style="font-family:'DM Sans',sans-serif;font-size:13px;color:#444444">3 tables, 2 links</span></div>
+          <div style="display:flex;align-items:center;gap:14px">
+            <div style="display:flex;gap:6px">
+              <button onClick="{{ erdCrow }}" style="height:32px;padding:0 14px;background:{{ erdN.crowBg }};color:{{ erdN.crowFg }};border:2px solid #111111;border-radius:999px;box-shadow:0 3px 0 #111111;font-family:'DM Sans',sans-serif;font-weight:700;font-size:13px;white-space:nowrap;cursor:pointer" style-active="transform:translateY(2px);box-shadow:0 1px 0 #111111">Crow's foot</button>
+              <button onClick="{{ erdChen }}" style="height:32px;padding:0 14px;background:{{ erdN.chenBg }};color:{{ erdN.chenFg }};border:2px solid #111111;border-radius:999px;box-shadow:0 3px 0 #111111;font-family:'DM Sans',sans-serif;font-weight:700;font-size:13px;white-space:nowrap;cursor:pointer" style-active="transform:translateY(2px);box-shadow:0 1px 0 #111111">Chen</button>
+              <button onClick="{{ erdUml }}" style="height:32px;padding:0 14px;background:{{ erdN.umlBg }};color:{{ erdN.umlFg }};border:2px solid #111111;border-radius:999px;box-shadow:0 3px 0 #111111;font-family:'DM Sans',sans-serif;font-weight:700;font-size:13px;white-space:nowrap;cursor:pointer" style-active="transform:translateY(2px);box-shadow:0 1px 0 #111111">UML</button>
+            </div>
+            <button onClick="{{ erdClose }}" title="Close" style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;background:#FFFFFF;border:2px solid #111111;border-radius:50%;box-shadow:0 3px 0 #111111;font-family:'DM Sans',sans-serif;font-weight:700;font-size:16px;line-height:1;cursor:pointer;color:#111111" style-active="transform:translateY(2px);box-shadow:0 1px 0 #111111">×</button>
+          </div>
+        </div>
+        <div style="position:relative;height:340px;background-color:#FFFFFF;background-image:radial-gradient({{ th.c2 }} 1.6px,transparent 1.6px);background-size:22px 22px;overflow:hidden">
+          <sc-if value="{{ erdN.isBox }}" hint-placeholder-val="{{ true }}">
+            <svg width="880" height="340" viewBox="0 0 880 340" style="position:absolute;inset:0" fill="none" stroke="#111111" stroke-width="2">
+              <path d="M270 128 H305 V98 H340"></path>
+              <path d="M570 122 H605 V128 H640"></path>
+              <sc-if value="{{ erdN.isCrow }}" hint-placeholder-val="{{ true }}">
+                <path d="M282 118 V138 M326 98 L340 88 M326 98 L340 98 M326 98 L340 108"></path>
+                <path d="M628 118 V138 M584 122 L570 112 M584 122 L570 122 M584 122 L570 132"></path>
+              </sc-if>
+              <sc-if value="{{ erdN.isUml }}" hint-placeholder-val="{{ false }}">
+                <text x="276" y="116" fill="#111111" stroke="none" font-family="Space Mono, monospace" font-size="12" font-weight="700">1</text>
+                <text x="328" y="90" fill="#111111" stroke="none" font-family="Space Mono, monospace" font-size="12" font-weight="700">*</text>
+                <text x="628" y="116" fill="#111111" stroke="none" font-family="Space Mono, monospace" font-size="12" font-weight="700" text-anchor="end">1</text>
+                <text x="580" y="114" fill="#111111" stroke="none" font-family="Space Mono, monospace" font-size="12" font-weight="700" text-anchor="end">*</text>
+              </sc-if>
+            </svg>
+            <div style="position:absolute;left:60px;top:70px;width:210px;background:#FFFFFF;border:2px solid #111111;border-radius:{{ erdN.r }};box-shadow:0 4px 0 #111111;overflow:hidden">
+              <div style="padding:8px 12px;background:{{ th.c2 }};border-bottom:2px solid #111111;font-family:'League Spartan',sans-serif;font-weight:800;font-size:15px;text-align:{{ erdN.ta }}">students</div>
+              <div style="display:flex;justify-content:space-between;gap:8px;padding:5px 12px;height:30px;box-sizing:border-box;font-family:'DM Sans',sans-serif;font-size:13px;border-bottom:1px solid {{ th.c2 }}"><span style="font-weight:700;text-decoration:underline">{{ erdN.pk }}student_id</span><span style="font-style:italic;color:#555555">int</span></div>
+              <div style="display:flex;justify-content:space-between;gap:8px;padding:5px 12px;height:30px;box-sizing:border-box;font-family:'DM Sans',sans-serif;font-size:13px;border-bottom:1px solid {{ th.c2 }}"><span style="font-weight:600">name</span><span style="font-style:italic;color:#555555">text</span></div>
+              <div style="display:flex;justify-content:space-between;gap:8px;padding:5px 12px;height:30px;box-sizing:border-box;font-family:'DM Sans',sans-serif;font-size:13px"><span style="font-weight:600">year</span><span style="font-style:italic;color:#555555">int</span></div>
+            </div>
+            <div style="position:absolute;left:340px;top:40px;width:230px;background:#FFFFFF;border:2px solid #111111;border-radius:{{ erdN.r }};box-shadow:0 4px 0 #111111;overflow:hidden">
+              <div style="padding:8px 12px;background:{{ th.acc }};border-bottom:2px solid #111111;font-family:'League Spartan',sans-serif;font-weight:800;font-size:15px;text-align:{{ erdN.ta }}">enrolments</div>
+              <div style="display:flex;justify-content:space-between;gap:8px;padding:5px 12px;height:30px;box-sizing:border-box;font-family:'DM Sans',sans-serif;font-size:13px;border-bottom:1px solid {{ th.c2 }}"><span style="font-weight:700">{{ erdN.fk }}student_id</span><span style="font-style:italic;color:#555555">int</span></div>
+              <div style="display:flex;justify-content:space-between;gap:8px;padding:5px 12px;height:30px;box-sizing:border-box;font-family:'DM Sans',sans-serif;font-size:13px;border-bottom:1px solid {{ th.c2 }}"><span style="font-weight:700">{{ erdN.fk }}course_id</span><span style="font-style:italic;color:#555555">text</span></div>
+              <div style="display:flex;justify-content:space-between;gap:8px;padding:5px 12px;height:30px;box-sizing:border-box;font-family:'DM Sans',sans-serif;font-size:13px;border-bottom:1px solid {{ th.c2 }}"><span style="font-weight:600">grade</span><span style="font-style:italic;color:#555555">float</span></div>
+              <div style="display:flex;justify-content:space-between;gap:8px;padding:5px 12px;height:30px;box-sizing:border-box;font-family:'DM Sans',sans-serif;font-size:13px"><span style="font-weight:600">term</span><span style="font-style:italic;color:#555555">text</span></div>
+            </div>
+            <div style="position:absolute;left:640px;top:70px;width:200px;background:#FFFFFF;border:2px solid #111111;border-radius:{{ erdN.r }};box-shadow:0 4px 0 #111111;overflow:hidden">
+              <div style="padding:8px 12px;background:{{ th.c2 }};border-bottom:2px solid #111111;font-family:'League Spartan',sans-serif;font-weight:800;font-size:15px;text-align:{{ erdN.ta }}">courses</div>
+              <div style="display:flex;justify-content:space-between;gap:8px;padding:5px 12px;height:30px;box-sizing:border-box;font-family:'DM Sans',sans-serif;font-size:13px;border-bottom:1px solid {{ th.c2 }}"><span style="font-weight:700;text-decoration:underline">{{ erdN.pk }}course_id</span><span style="font-style:italic;color:#555555">text</span></div>
+              <div style="display:flex;justify-content:space-between;gap:8px;padding:5px 12px;height:30px;box-sizing:border-box;font-family:'DM Sans',sans-serif;font-size:13px;border-bottom:1px solid {{ th.c2 }}"><span style="font-weight:600">title</span><span style="font-style:italic;color:#555555">text</span></div>
+              <div style="display:flex;justify-content:space-between;gap:8px;padding:5px 12px;height:30px;box-sizing:border-box;font-family:'DM Sans',sans-serif;font-size:13px"><span style="font-weight:600">dept</span><span style="font-style:italic;color:#555555">text</span></div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ erdN.isChen }}" hint-placeholder-val="{{ false }}">
+            <svg width="880" height="340" viewBox="0 0 880 340" style="position:absolute;inset:0" font-family="DM Sans, sans-serif" font-size="13" font-weight="600">
+              <g stroke="#111111" stroke-width="2">
+                <path d="M85 92 L160 165 M160 72 L160 165 M235 92 L160 165"></path>
+                <path d="M645 92 L720 165 M720 72 L720 165 M795 92 L720 165"></path>
+                <path d="M390 275 L440 225 M490 275 L440 225"></path>
+                <path d="M220 190 H370 M510 190 H660"></path>
+              </g>
+              <g fill="#FFFFFF" stroke="#111111" stroke-width="2">
+                <ellipse cx="85" cy="82" rx="48" ry="19"></ellipse><ellipse cx="160" cy="52" rx="34" ry="19"></ellipse><ellipse cx="235" cy="82" rx="30" ry="19"></ellipse>
+                <ellipse cx="645" cy="82" rx="48" ry="19"></ellipse><ellipse cx="720" cy="52" rx="30" ry="19"></ellipse><ellipse cx="795" cy="82" rx="30" ry="19"></ellipse>
+                <ellipse cx="390" cy="285" rx="34" ry="19"></ellipse><ellipse cx="490" cy="285" rx="32" ry="19"></ellipse>
+                <rect x="100" y="165" width="120" height="50" fill="{{ th.c2 }}"></rect>
+                <rect x="660" y="165" width="120" height="50" fill="{{ th.c2 }}"></rect>
+                <path d="M440 150 L510 190 L440 230 L370 190 Z" fill="{{ th.acc }}"></path>
+              </g>
+              <g fill="#111111" text-anchor="middle" dominant-baseline="middle">
+                <text x="85" y="83" text-decoration="underline">student_id</text><text x="160" y="53">name</text><text x="235" y="83">year</text>
+                <text x="645" y="83" text-decoration="underline">course_id</text><text x="720" y="53">title</text><text x="795" y="83">dept</text>
+                <text x="390" y="286">grade</text><text x="490" y="286">term</text>
+                <text x="160" y="191" font-family="League Spartan, sans-serif" font-weight="800" font-size="16">Student</text>
+                <text x="720" y="191" font-family="League Spartan, sans-serif" font-weight="800" font-size="16">Course</text>
+                <text x="440" y="191" font-family="League Spartan, sans-serif" font-weight="800" font-size="15">Enrols in</text>
+                <text x="295" y="178" font-family="Space Mono, monospace" font-weight="700" font-size="13">M</text>
+                <text x="585" y="178" font-family="Space Mono, monospace" font-weight="700" font-size="13">N</text>
+              </g>
+            </svg>
+          </sc-if>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 16px 12px 22px;border-top:2px solid #111111;background:{{ th.c0 }};border-radius:0 0 14px 0;font-family:'DM Sans',sans-serif;font-size:12.5px;color:#444444;line-height:1.5">
+          <span style="flex:none;font-family:'League Spartan',sans-serif;font-weight:800;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#111111">Inferred</span>
+          <span>{{ erdN.note }} Columns with the same name in two tables are treated as links: <span style="font-family:'Space Mono',monospace">student_id</span> and <span style="font-family:'Space Mono',monospace">course_id</span>. Nothing links <span style="font-family:'Space Mono',monospace">students</span> and <span style="font-family:'Space Mono',monospace">courses</span> directly.</span>
+        </div>
+      </div>
+    </sc-if>
+    <div style="display:flex;align-items:center;gap:14px;padding:0 16px;background:{{ th.acc }};border-bottom:2.5px solid #111111">
+      <div style="display:flex;gap:7px"><span style="width:13px;height:13px;border-radius:50%;background:#FFFFFF;border:2px solid #111111"></span><span style="width:13px;height:13px;border-radius:50%;background:#FFFFFF;border:2px solid #111111"></span></div>
+      <div style="flex:1;height:10px;background:repeating-linear-gradient(#111111 0 2px,transparent 2px 4px)"></div>
+      <span style="font-family:'League Spartan',sans-serif;font-weight:800;font-size:15px;white-space:nowrap">BlockCode — Department grades</span>
+      <div style="flex:1;height:10px;background:repeating-linear-gradient(#111111 0 2px,transparent 2px 4px)"></div>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:0 20px;border-bottom:2px solid #111111;background:{{ th.c0 }}">
+      <div style="display:flex;align-items:center;gap:12px;font-size:14px">
+        <span style="font-weight:600;white-space:nowrap">Department grades</span>
+        <span style="background:{{ th.c2 }};border:1.5px solid #111111;border-radius:999px;padding:2px 10px;font-size:12px">school sample</span>
+        <span style="font-size:12px;color:#666666">Saved</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:14px">
+        <sc-if value="{{ setA }}" hint-placeholder-val="{{ false }}">
+          <button onClick="{{ run }}" style="display:flex;align-items:center;gap:9px;background:{{ th.acc }};color:#111111;border:2px solid #111111;border-radius:10px;padding:9px 18px;box-shadow:4px 4px 0 #111111;font-family:'League Spartan',sans-serif;font-weight:800;font-size:15px;white-space:nowrap;cursor:pointer" style-active="transform:translate(2px,2px);box-shadow:2px 2px 0 #111111"><svg width="11" height="11" viewBox="0 0 10 10"><path d="M2 1l7 4-7 4z" fill="currentColor"></path></svg>{{ runLabel }}</button>
+          <button style="background:#FFFFFF;color:#111111;border:2px solid #111111;border-radius:10px;padding:9px 18px;box-shadow:4px 4px 0 #111111;font-family:'League Spartan',sans-serif;font-weight:800;font-size:15px;white-space:nowrap;cursor:pointer" style-active="transform:translate(2px,2px);box-shadow:2px 2px 0 #111111">{{ exportLabel }}</button>
+        </sc-if>
+        <sc-if value="{{ setB }}" hint-placeholder-val="{{ false }}">
+          <button onClick="{{ run }}" style="position:relative;display:flex;align-items:center;gap:9px;background:{{ th.acc }};color:#111111;border:2px solid #111111;border-radius:6px;padding:9px 18px;box-shadow:0 4px 0 #111111;font-family:'League Spartan',sans-serif;font-weight:800;font-size:15px;white-space:nowrap;cursor:pointer" style-active="transform:translateY(3px);box-shadow:0 1px 0 #111111"><span style="position:absolute;top:-7px;left:12px;width:15px;height:7px;background:{{ th.acc }};border:2px solid #111111;border-bottom:0;border-radius:4px 4px 0 0"></span><span style="position:absolute;top:-7px;left:33px;width:15px;height:7px;background:{{ th.acc }};border:2px solid #111111;border-bottom:0;border-radius:4px 4px 0 0"></span><svg width="11" height="11" viewBox="0 0 10 10"><path d="M2 1l7 4-7 4z" fill="currentColor"></path></svg>{{ runLabel }}</button>
+          <button style="position:relative;background:#FFFFFF;color:#111111;border:2px solid #111111;border-radius:6px;padding:9px 18px;box-shadow:0 4px 0 #111111;font-family:'League Spartan',sans-serif;font-weight:800;font-size:15px;white-space:nowrap;cursor:pointer" style-active="transform:translateY(3px);box-shadow:0 1px 0 #111111"><span style="position:absolute;top:-7px;left:12px;width:15px;height:7px;background:#FFFFFF;border:2px solid #111111;border-bottom:0;border-radius:4px 4px 0 0"></span><span style="position:absolute;top:-7px;left:33px;width:15px;height:7px;background:#FFFFFF;border:2px solid #111111;border-bottom:0;border-radius:4px 4px 0 0"></span>{{ exportLabel }}</button>
+        </sc-if>
+        <sc-if value="{{ setC }}" hint-placeholder-val="{{ true }}">
+          <button onClick="{{ run }}" style="display:flex;align-items:center;gap:9px;background:#111111;color:{{ th.c1 }};border:2px solid #111111;border-radius:999px;padding:9px 22px;box-shadow:0 4px 0 {{ th.acc }};font-family:'DM Sans',sans-serif;font-weight:700;font-size:14px;white-space:nowrap;cursor:pointer" style-active="transform:translateY(3px);box-shadow:0 1px 0 {{ th.acc }}"><svg width="11" height="11" viewBox="0 0 10 10"><path d="M2 1l7 4-7 4z" fill="currentColor"></path></svg>{{ runLabel }}</button>
+          <button style="background:{{ th.c2 }};color:#111111;border:2px solid #111111;border-radius:999px;padding:9px 22px;box-shadow:0 4px 0 #111111;font-family:'DM Sans',sans-serif;font-weight:700;font-size:14px;white-space:nowrap;cursor:pointer" style-active="transform:translateY(3px);box-shadow:0 1px 0 #111111">{{ exportLabel }}</button>
+        </sc-if>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:264px minmax(0,1fr) 440px;min-height:0">
+      <div style="border-right:2px solid #111111;background:{{ th.c0 }};padding:24px 20px 32px;display:flex;flex-direction:column;gap:34px;overflow:auto">
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+            <div style="font-family:'League Spartan',sans-serif;font-weight:800;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#444444">Tables</div>
+            <button onClick="{{ erdToggle }}" title="Sketch how these tables link up" style="display:flex;align-items:center;gap:6px;height:28px;padding:0 10px 0 8px;background:{{ erdBtnBg }};color:{{ erdBtnFg }};border:2px solid #111111;border-radius:999px;box-shadow:0 3px 0 #111111;font-family:'DM Sans',sans-serif;font-weight:700;font-size:12px;white-space:nowrap;cursor:pointer" style-active="transform:translateY(2px);box-shadow:0 1px 0 #111111"><svg width="14" height="12" viewBox="0 0 14 12" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="0.8" y="0.8" width="4.4" height="4.4"></rect><rect x="8.8" y="0.8" width="4.4" height="4.4"></rect><rect x="4.8" y="6.8" width="4.4" height="4.4"></rect><path d="M3 5.2 L7 6.8 M11 5.2 L7 6.8"></path></svg>ERD</button>
+          </div>
+          <div style="position:relative;display:flex;flex-direction:column;background:#FFFFFF;border:2px solid #111111;border-radius:16px 16px 6px 6px;box-shadow:0 4px 0 #111111;overflow:hidden;cursor:grab">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:10px 14px;background:{{ th.c2 }};border-bottom:2px solid #111111"><span style="font-family:'League Spartan',sans-serif;font-weight:800;font-size:17px">enrolments</span><span style="font-family:'DM Sans',sans-serif;font-weight:600;font-size:12px;white-space:nowrap">2,310 rows</span></div>
+            <div style="position:relative;padding-bottom:6px">
+              <span style="position:absolute;top:0;bottom:0;left:20px;width:1.5px;background:{{ th.acc }}"></span>
+              <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:5px 12px 5px 30px;border-bottom:1px solid {{ th.c2 }}"><span style="font-family:'DM Sans',sans-serif;font-weight:600;font-size:13px">student_id</span><span style="font-family:'DM Sans',sans-serif;font-style:italic;font-size:12px;color:#555555;white-space:nowrap">int</span></div><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:5px 12px 5px 30px;border-bottom:1px solid {{ th.c2 }}"><span style="font-family:'DM Sans',sans-serif;font-weight:600;font-size:13px">course_id</span><span style="font-family:'DM Sans',sans-serif;font-style:italic;font-size:12px;color:#555555;white-space:nowrap">text</span></div><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:5px 12px 0 30px"><span style="font-family:'DM Sans',sans-serif;font-weight:600;font-size:13px">grade</span><span style="font-family:'DM Sans',sans-serif;font-style:italic;font-size:12px;color:#555555;white-space:nowrap">float</span></div><div style="padding:0 12px 5px 30px;border-bottom:1px solid {{ th.c2 }};font-family:'DM Sans',sans-serif;font-style:italic;font-weight:600;font-size:11px;color:#A01C1C">8 empty values</div><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:5px 12px 5px 30px;border-bottom:1px solid {{ th.c2 }}"><span style="font-family:'DM Sans',sans-serif;font-weight:600;font-size:13px">term</span><span style="font-family:'DM Sans',sans-serif;font-style:italic;font-size:12px;color:#555555;white-space:nowrap">text</span></div>
+            </div>
+          </div>
+          <div style="position:relative;display:flex;flex-direction:column;background:#FFFFFF;border:2px solid #111111;border-radius:16px 16px 6px 6px;box-shadow:0 4px 0 #111111;overflow:hidden;cursor:grab">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:10px 14px;background:{{ th.c2 }};border-bottom:2px solid #111111"><span style="font-family:'League Spartan',sans-serif;font-weight:800;font-size:17px">courses</span><span style="font-family:'DM Sans',sans-serif;font-weight:600;font-size:12px;white-space:nowrap">24 rows</span></div>
+            <div style="position:relative;padding-bottom:6px">
+              <span style="position:absolute;top:0;bottom:0;left:20px;width:1.5px;background:{{ th.acc }}"></span>
+              <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:5px 12px 5px 30px;border-bottom:1px solid {{ th.c2 }}"><span style="font-family:'DM Sans',sans-serif;font-weight:600;font-size:13px">course_id</span><span style="font-family:'DM Sans',sans-serif;font-style:italic;font-size:12px;color:#555555;white-space:nowrap">text</span></div><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:5px 12px 5px 30px;border-bottom:1px solid {{ th.c2 }}"><span style="font-family:'DM Sans',sans-serif;font-weight:600;font-size:13px">title</span><span style="font-family:'DM Sans',sans-serif;font-style:italic;font-size:12px;color:#555555;white-space:nowrap">text</span></div><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:5px 12px 5px 30px;border-bottom:1px solid {{ th.c2 }}"><span style="font-family:'DM Sans',sans-serif;font-weight:600;font-size:13px">dept</span><span style="font-family:'DM Sans',sans-serif;font-style:italic;font-size:12px;color:#555555;white-space:nowrap">text</span></div>
+            </div>
+          </div>
+          <div style="position:relative;display:flex;flex-direction:column;background:#FFFFFF;border:2px solid #111111;border-radius:16px 16px 6px 6px;box-shadow:0 4px 0 #111111;overflow:hidden;cursor:grab">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:10px 14px;background:{{ th.c2 }};border-bottom:2px solid #111111"><span style="font-family:'League Spartan',sans-serif;font-weight:800;font-size:17px">students</span><span style="font-family:'DM Sans',sans-serif;font-weight:600;font-size:12px;white-space:nowrap">480 rows</span></div>
+            <div style="position:relative;padding-bottom:6px">
+              <span style="position:absolute;top:0;bottom:0;left:20px;width:1.5px;background:{{ th.acc }}"></span>
+              <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:5px 12px 5px 30px;border-bottom:1px solid {{ th.c2 }}"><span style="font-family:'DM Sans',sans-serif;font-weight:600;font-size:13px">student_id</span><span style="font-family:'DM Sans',sans-serif;font-style:italic;font-size:12px;color:#555555;white-space:nowrap">int</span></div><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:5px 12px 5px 30px;border-bottom:1px solid {{ th.c2 }}"><span style="font-family:'DM Sans',sans-serif;font-weight:600;font-size:13px">name</span><span style="font-family:'DM Sans',sans-serif;font-style:italic;font-size:12px;color:#555555;white-space:nowrap">text</span></div><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:5px 12px 5px 30px;border-bottom:1px solid {{ th.c2 }}"><span style="font-family:'DM Sans',sans-serif;font-weight:600;font-size:13px">year</span><span style="font-family:'DM Sans',sans-serif;font-style:italic;font-size:12px;color:#555555;white-space:nowrap">int</span></div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:center;height:44px;border:2px dashed #111111;border-radius:16px 16px 6px 6px;font-family:'DM Sans',sans-serif;font-weight:600;font-size:13px;color:#444444">Drop a .csv here</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div style="font-family:'League Spartan',sans-serif;font-weight:800;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#444444">Blocks</div>
+          <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px 10px"><sc-for list="{{ palData }}" as="pd" hint-placeholder-count="2"><button onClick="{{ pd.add }}" title="{{ pd.title }}" style="position:relative;display:flex;align-items:center;height:44px;box-sizing:border-box;padding:0 14px;background:{{ pd.bg }};color:{{ pd.fg }};border:2px {{ pd.bs }} {{ pd.bc }};border-radius:6px;box-shadow:{{ pd.sh }};font-family:'League Spartan',sans-serif;font-weight:800;font-size:15px;cursor:{{ pd.cursor }};text-align:left;white-space:nowrap" style-active="transform:translateY(3px);box-shadow:0 1px 0 #111111"><span style="position:absolute;top:-8px;left:16px;width:24px;height:8px;background:{{ pd.bg }};border:2px solid {{ pd.bc }};border-bottom:0;border-radius:5px 5px 0 0"></span>{{ pd.label }}</button></sc-for></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div style="font-family:'League Spartan',sans-serif;font-weight:800;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#444444">Conditions</div>
+          <div style="display:flex;flex-wrap:wrap;gap:10px 8px"><span style="display:flex;align-items:center;height:34px;padding:0 14px;background:#FFFFFF;border:2px solid #111111;border-radius:999px;box-shadow:0 3px 0 #111111;font-family:'DM Sans',sans-serif;font-weight:700;font-size:13px;white-space:nowrap;cursor:grab">_ &gt; _</span><span style="display:flex;align-items:center;height:34px;padding:0 14px;background:#FFFFFF;border:2px solid #111111;border-radius:999px;box-shadow:0 3px 0 #111111;font-family:'DM Sans',sans-serif;font-weight:700;font-size:13px;white-space:nowrap;cursor:grab">and</span><span style="display:flex;align-items:center;height:34px;padding:0 14px;background:#FFFFFF;border:2px solid #111111;border-radius:999px;box-shadow:0 3px 0 #111111;font-family:'DM Sans',sans-serif;font-weight:700;font-size:13px;white-space:nowrap;cursor:grab">not</span><span style="display:flex;align-items:center;height:34px;padding:0 14px;background:#FFFFFF;border:2px solid #111111;border-radius:999px;box-shadow:0 3px 0 #111111;font-family:'DM Sans',sans-serif;font-weight:700;font-size:13px;white-space:nowrap;cursor:grab">is empty</span><span style="display:flex;align-items:center;height:34px;padding:0 14px;background:#FFFFFF;border:2px solid #111111;border-radius:999px;box-shadow:0 3px 0 #111111;font-family:'DM Sans',sans-serif;font-weight:700;font-size:13px;white-space:nowrap;cursor:grab">in list</span><span style="display:flex;align-items:center;height:34px;padding:0 14px;background:#FFFFFF;border:2px solid #111111;border-radius:999px;box-shadow:0 3px 0 #111111;font-family:'DM Sans',sans-serif;font-weight:700;font-size:13px;white-space:nowrap;cursor:grab">contains</span></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div style="font-family:'League Spartan',sans-serif;font-weight:800;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#444444">Python &amp; R</div>
+          <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px 10px"><sc-for list="{{ palExtra }}" as="pd" hint-placeholder-count="2"><button onClick="{{ pd.add }}" title="{{ pd.title }}" style="position:relative;display:flex;align-items:center;height:44px;box-sizing:border-box;padding:0 14px;background:{{ pd.bg }};color:{{ pd.fg }};border:2px {{ pd.bs }} {{ pd.bc }};border-radius:6px;box-shadow:{{ pd.sh }};font-family:'League Spartan',sans-serif;font-weight:800;font-size:15px;cursor:{{ pd.cursor }};text-align:left;white-space:nowrap" style-active="transform:translateY(3px);box-shadow:0 1px 0 #111111"><span style="position:absolute;top:-8px;left:16px;width:24px;height:8px;background:{{ pd.bg }};border:2px solid {{ pd.bc }};border-bottom:0;border-radius:5px 5px 0 0"></span>{{ pd.label }}</button></sc-for><span style="position:relative;display:flex;align-items:center;height:44px;box-sizing:border-box;padding:0 14px;background:#FFFFFF;border:2px dashed #111111;border-radius:6px;box-shadow:0 4px 0 #111111;font-family:'League Spartan',sans-serif;font-weight:800;font-size:15px;white-space:nowrap"><span style="position:absolute;top:-8px;left:16px;width:24px;height:8px;background:#FFFFFF;border:2px dashed #111111;border-bottom:0;border-radius:5px 5px 0 0"></span>Set var</span><span style="position:relative;display:flex;align-items:center;height:44px;box-sizing:border-box;padding:0 14px;background:#FFFFFF;border:2px dashed #111111;border-radius:6px;box-shadow:0 4px 0 #111111;font-family:'League Spartan',sans-serif;font-weight:800;font-size:15px;white-space:nowrap"><span style="position:absolute;top:-8px;left:16px;width:24px;height:8px;background:#FFFFFF;border:2px dashed #111111;border-bottom:0;border-radius:5px 5px 0 0"></span>If / else</span></div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-rows:minmax(0,1fr) auto;min-height:0">
+        <div style="position:relative;background-color:#FFFFFF;background-image:radial-gradient({{ th.c2 }} 1.6px,transparent 1.6px);background-size:22px 22px;padding:34px 26px;overflow:auto;scrollbar-width:thin">
+          <div style="display:inline-flex;flex-direction:column;align-items:stretch;font-family:'League Spartan',sans-serif;font-weight:700;font-size:16px;color:#111111">
+            <sc-for list="{{ stack }}" as="bk" hint-placeholder-count="8">
+              <div onMouseEnter="{{ bk.hover }}" onMouseLeave="{{ unhov }}" style="position:relative;display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px;min-width:430px;align-self:{{ bk.as }};padding:13px 16px;background:{{ bk.bg }};color:{{ bk.fg }};border:2px {{ bk.bs }} {{ bk.bc }};border-radius:{{ bk.r }};margin-top:{{ bk.mt }};transform:{{ bk.tf }};box-shadow:{{ bk.sh }};cursor:grab;outline:{{ bk.ol }};outline-offset:3px;transition:transform .3s,margin-top .3s,background .3s,box-shadow .3s">
+                <span style="white-space:nowrap">{{ bk.label }}</span>
+                <sc-if value="{{ bk.isSrc }}" hint-placeholder-val="{{ false }}">
+                  <span style="background:{{ th.c1 }};color:#111111;border:1.5px solid #111111;padding:3px 10px;border-radius:6px;font-family:'Space Mono',monospace;font-weight:400;font-size:12px">enrolments ▾</span>
+                  <span style="white-space:nowrap;font-family:'DM Sans',sans-serif;font-weight:600;font-size:11px">2,310 rows</span>
+                </sc-if>
+                <sc-if value="{{ bk.isGroup }}" hint-placeholder-val="{{ false }}">
+                  <span style="background:#FFFFFF;border:1.5px solid {{ bk.bc }};padding:3px 10px;border-radius:6px;white-space:nowrap;font-family:'Space Mono',monospace;font-weight:400;font-size:12px">dept ▾</span>
+                  <span style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap;background:{{ th.c2 }};border:1.5px solid #111111;padding:3px 6px;border-radius:999px;font-family:'Space Mono',monospace;font-weight:400;font-size:12px"><span style="background:#FFFFFF;padding:1px 8px;border-radius:999px;white-space:nowrap">{{ kw.avg }} ▾</span>of<span style="background:#FFFFFF;padding:1px 8px;border-radius:999px;white-space:nowrap">grade ▾</span></span>
+                  <span>{{ kw.as }}</span>
+                  <span style="background:#FFFFFF;border:1.5px solid {{ bk.bc }};padding:3px 10px;border-radius:6px;white-space:nowrap;font-family:'Space Mono',monospace;font-weight:400;font-size:12px">avg_grade</span>
+                  <span style="background:{{ th.c2 }};border:1.5px solid #111111;padding:3px 10px;border-radius:999px;font-family:'Space Mono',monospace;font-weight:400;font-size:12px">{{ kw.count }}</span>
+                  <span>{{ kw.as }}</span>
+                  <span style="background:#FFFFFF;border:1.5px solid {{ bk.bc }};padding:3px 10px;border-radius:6px;white-space:nowrap;font-family:'Space Mono',monospace;font-weight:400;font-size:12px">n</span>
+                </sc-if>
+                <sc-if value="{{ bk.isPills }}" hint-placeholder-val="{{ false }}">
+                  <span style="background:#FFFFFF;border:1.5px solid {{ bk.bc }};padding:3px 10px;border-radius:6px;white-space:nowrap;font-family:'Space Mono',monospace;font-weight:400;font-size:12px">{{ bk.p1 }}</span>
+                  <span>{{ bk.s1 }}</span>
+                  <sc-if value="{{ bk.hasP2 }}" hint-placeholder-val="{{ false }}"><span style="background:#FFFFFF;border:1.5px solid {{ bk.bc }};padding:3px 10px;border-radius:6px;white-space:nowrap;font-family:'Space Mono',monospace;font-weight:400;font-size:12px">{{ bk.p2 }}</span></sc-if>
+                  <sc-if value="{{ bk.hasS2 }}" hint-placeholder-val="{{ false }}"><span>{{ bk.s2 }}</span></sc-if>
+                  <sc-if value="{{ bk.hasP3 }}" hint-placeholder-val="{{ false }}"><span style="background:#FFFFFF;border:1.5px solid {{ bk.bc }};padding:3px 10px;border-radius:6px;white-space:nowrap;font-family:'Space Mono',monospace;font-weight:400;font-size:12px">{{ bk.p3 }}</span></sc-if>
+                </sc-if>
+                <sc-if value="{{ bk.isExpr }}" hint-placeholder-val="{{ false }}">
+                  <span style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap;background:{{ th.c2 }};border:1.5px solid #111111;padding:3px 6px;border-radius:999px;font-family:'Space Mono',monospace;font-weight:400;font-size:12px"><span style="background:#FFFFFF;padding:1px 8px;border-radius:999px;white-space:nowrap">{{ bk.e1 }}</span>{{ bk.eop }}<span style="background:#FFFFFF;padding:1px 8px;border-radius:999px;white-space:nowrap">{{ bk.e2 }}</span></span>
+                </sc-if>
+                <sc-if value="{{ bk.detached }}" hint-placeholder-val="{{ false }}">
+                  <span style="font-family:'DM Sans',sans-serif;font-weight:600;font-size:12px;background:#FFFFFF;color:#444444;border:1.5px dashed #888888;padding:3px 10px;border-radius:999px;white-space:nowrap">Detached</span>
+                </sc-if>
+                <sc-if value="{{ bk.removable }}" hint-placeholder-val="{{ true }}">
+                  <button onClick="{{ bk.remove }}" title="Remove block" style="margin-left:auto;display:flex;align-items:center;justify-content:center;width:26px;height:26px;flex-shrink:0;border:2px solid {{ bk.bc }};border-radius:6px;background:#FFFFFF;color:#111111;font-family:'Space Mono',monospace;font-size:13px;font-weight:700;cursor:pointer;padding:0">×</button>
+                </sc-if>
+                <sc-if value="{{ bk.stud }}" hint-placeholder-val="{{ true }}"><span style="position:absolute;bottom:-9px;left:16px;width:24px;height:9px;background:{{ bk.bg }};border:2px solid #111111;border-top:0;border-radius:0 0 6px 6px;z-index:2"></span></sc-if>
+                <sc-if value="{{ bk.showTip }}" hint-placeholder-val="{{ false }}">
+                  <div style="position:absolute;left:0;top:{{ bk.tipTop }};bottom:{{ bk.tipBottom }};z-index:8;display:flex;gap:10px;align-items:center;width:340px;padding:8px 14px 8px 6px;background:#FFFFFF;border:2px solid #111111;border-radius:12px;box-shadow:4px 4px 0 #111111;cursor:default;animation:popIn .18s ease-out">
+                    <div style="flex:none;width:136px">{{ bk.diagram }}</div>
+                    <div style="display:flex;flex-direction:column;gap:5px;min-width:0">
+                      <span style="font-family:'League Spartan',sans-serif;font-weight:800;font-size:15px;color:#111111">{{ bk.tipTitle }}</span>
+                      <span style="font-family:'DM Sans',sans-serif;font-weight:400;font-size:12.5px;line-height:1.45;color:#444444;white-space:normal">{{ bk.cap }}</span>
+                    </div>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-for>
+            <sc-if value="{{ canDropPlot }}" hint-placeholder-val="{{ true }}">
+              <button onClick="{{ addPlot }}" style="min-width:430px;margin-top:14px;padding:11px 16px;border:2px dashed #111111;border-radius:12px;background:{{ th.c0 }};font-family:'DM Sans',sans-serif;font-weight:600;font-size:14px;color:#444444;cursor:pointer;text-align:left" style-hover="background:{{ th.c1 }}">+ Drop another plot here</button>
+            </sc-if>
+
+            <sc-if value="{{ pyOnly }}" hint-placeholder-val="{{ false }}">
+              <div onMouseEnter="{{ hv.loop }}" onMouseLeave="{{ unhov }}" style="position:relative;display:flex;flex-direction:column;min-width:430px;margin-top:22px;cursor:grab;outline:{{ ol.loop }};outline-offset:3px;border-radius:8px">
+                <sc-if value="{{ tipLoop.show }}" hint-placeholder-val="{{ false }}">
+                  <div style="position:absolute;left:0;bottom:calc(100% + 14px);z-index:8;display:flex;gap:10px;align-items:center;width:340px;padding:8px 14px 8px 6px;background:#FFFFFF;border:2px solid #111111;border-radius:12px;box-shadow:4px 4px 0 #111111;cursor:default;animation:popIn .18s ease-out">
+                    <div style="flex:none;width:136px">{{ tipLoop.diagram }}</div>
+                    <div style="display:flex;flex-direction:column;gap:5px;min-width:0">
+                      <span style="font-family:'League Spartan',sans-serif;font-weight:800;font-size:15px;color:#111111">{{ tipLoop.title }}</span>
+                      <span style="font-family:'DM Sans',sans-serif;font-weight:400;font-size:12.5px;line-height:1.45;color:#444444;white-space:normal">{{ tipLoop.cap }}</span>
+                    </div>
+                  </div>
+                </sc-if>
+                <div style="display:flex;align-items:center;gap:10px;padding:13px 16px;background:#FFFFFF;border:2px dashed #111111;border-bottom:0;border-radius:8px 8px 0 0">For each
+                  <span style="background:{{ th.c1 }};border:1.5px solid #111111;padding:3px 10px;border-radius:6px;white-space:nowrap;font-family:'Space Mono',monospace;font-weight:400;font-size:12px">row</span><span style="white-space:nowrap">in result</span>
+                  <span style="margin-left:auto;display:flex;align-items:center;gap:6px;white-space:nowrap;font-family:'DM Sans',sans-serif;font-weight:600;font-size:12px;background:#111111;color:{{ th.c1 }};padding:4px 10px;border-radius:999px"><span style="display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:{{ th.acc }};color:#111111;font-family:'Space Mono',monospace;font-size:10px;font-weight:700">!</span>No SQL equivalent</span>
+                  <button onClick="{{ removeLoop }}" title="Remove block" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;flex-shrink:0;border:2px solid #111111;border-radius:6px;background:#FFFFFF;color:#111111;font-family:'Space Mono',monospace;font-size:13px;font-weight:700;cursor:pointer;padding:0">×</button>
+                </div>
+                <div style="display:flex">
+                  <div style="width:24px;background:#FFFFFF;border-left:2px dashed #111111"></div>
+                  <div onMouseEnter="{{ hv.print }}" onMouseLeave="{{ hv.loop }}" style="position:relative;display:flex;align-items:center;gap:10px;padding:11px 14px;margin:6px 0;background:#FFFFFF;border:2px dashed #111111;border-radius:8px;outline:{{ ol.print }};outline-offset:3px">
+                    <sc-if value="{{ tipPrint.show }}" hint-placeholder-val="{{ false }}">
+                      <div style="position:absolute;left:0;top:calc(100% + 14px);z-index:8;display:flex;gap:10px;align-items:center;width:340px;padding:8px 14px 8px 6px;background:#FFFFFF;border:2px solid #111111;border-radius:12px;box-shadow:4px 4px 0 #111111;cursor:default;animation:popIn .18s ease-out">
+                        <div style="flex:none;width:136px">{{ tipPrint.diagram }}</div>
+                        <div style="display:flex;flex-direction:column;gap:5px;min-width:0">
+                          <span style="font-family:'League Spartan',sans-serif;font-weight:800;font-size:15px;color:#111111">{{ tipPrint.title }}</span>
+                          <span style="font-family:'DM Sans',sans-serif;font-weight:400;font-size:12.5px;line-height:1.45;color:#444444;white-space:normal">{{ tipPrint.cap }}</span>
+                        </div>
+                      </div>
+                    </sc-if>Print
+                    <span style="background:{{ th.c1 }};border:1.5px solid #111111;padding:3px 10px;border-radius:6px;white-space:nowrap;font-family:'Space Mono',monospace;font-weight:400;font-size:12px">{{ printArg1 }}</span>
+                    <span style="background:{{ th.c1 }};border:1.5px solid #111111;padding:3px 10px;border-radius:6px;white-space:nowrap;font-family:'Space Mono',monospace;font-weight:400;font-size:12px">row.avg_grade</span>
+                  </div>
+                </div>
+                <div style="height:18px;width:150px;background:#FFFFFF;border:2px dashed #111111;border-top:0;border-radius:0 0 8px 8px"></div>
+              </div>
+            </sc-if>
+          </div>
+
+          <sc-if value="{{ dropping }}" hint-placeholder-val="{{ false }}">
+            <div style="position:absolute;inset:16px;border:3px dashed #111111;border-radius:16px;background:rgba(253,232,232,.96);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px">
+              <div style="font-family:'League Spartan',sans-serif;font-weight:900;font-size:40px;text-shadow:3px 3px 0 {{ th.acc }}">Drop to load attendance.csv</div>
+              <div style="width:370px;background:#FFFFFF;border:2px solid #111111;border-radius:14px;box-shadow:6px 6px 0 #111111;padding:18px 20px;display:flex;flex-direction:column;gap:12px">
+                <div style="display:flex;justify-content:space-between;font-family:'League Spartan',sans-serif;font-weight:800;font-size:16px"><span>Columns we found</span><span style="font-family:'DM Sans',sans-serif;font-weight:600;font-size:12px;color:#666666">940 rows</span></div>
+                <div style="display:flex;flex-direction:column;gap:7px;font-family:'Space Mono',monospace;font-size:13px">
+                  <div style="display:flex;justify-content:space-between"><span>student_id</span><span style="background:{{ th.c2 }};padding:0 8px;border-radius:999px">int</span></div>
+                  <div style="display:flex;justify-content:space-between"><span>date</span><span style="background:{{ th.c2 }};padding:0 8px;border-radius:999px">text (date)</span></div>
+                  <div style="display:flex;justify-content:space-between"><span>present</span><span style="background:{{ th.c2 }};padding:0 8px;border-radius:999px">int</span></div>
+                  <div style="display:flex;justify-content:space-between"><span>note</span><span style="background:{{ th.c2 }};padding:0 8px;border-radius:999px">text · 611 empty</span></div>
+                </div>
+              </div>
+              <div style="font-size:15px;color:#444444">Saved to data/ and loaded as the table <span style="font-family:'Space Mono',monospace">attendance</span>.</div>
+            </div>
+          </sc-if>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 20px;flex-wrap:wrap;row-gap:6px;border-top:2px solid #111111;background:{{ th.c0 }};min-height:56px;font-family:'Space Mono',monospace;font-size:12px">
+          <sc-if value="{{ hasTip }}" hint-placeholder-val="{{ false }}">
+            <span style="background:#111111;color:{{ th.c1 }};padding:2px 9px;border-radius:999px;font-family:'DM Sans',sans-serif;font-weight:700;font-size:11px">SQL</span>
+            <span>{{ tip.sql }}</span>
+            <span style="font-size:17px">⇄</span>
+            <span style="background:{{ th.acc }};color:#111111;border:1.5px solid #111111;padding:1px 9px;border-radius:999px;font-family:'DM Sans',sans-serif;font-weight:700;font-size:11px">pandas</span>
+            <span>{{ tip.py }}</span>
+            <span style="font-size:17px">⇄</span>
+            <span style="background:#62BE74;color:#111111;border:1.5px solid #111111;padding:1px 9px;border-radius:999px;font-family:'DM Sans',sans-serif;font-weight:700;font-size:11px">dplyr</span>
+            <span>{{ tip.r }}</span>
+          </sc-if>
+          <sc-if value="{{ noTip }}" hint-placeholder-val="{{ true }}">
+            <span style="font-family:'DM Sans',sans-serif;font-size:14px;color:#444444">Hover a block to see it in SQL, Python and R.</span>
+          </sc-if>
+        </div>
+      </div>
+
+      <div style="border-left:2px solid #111111;display:flex;flex-direction:column;min-height:0;background:#FFFFFF">
+        <div style="display:flex;align-items:flex-end;gap:6px;padding:12px 16px 0;background:{{ th.c0 }};border-bottom:2px solid #111111">
+          <button onClick="{{ tabCode }}" style="background:{{ tabs.codeBg }};border:2px solid #111111;border-bottom:0;border-radius:10px 10px 0 0;padding:9px 18px;margin-bottom:-2px;cursor:pointer;font-family:'League Spartan',sans-serif;font-weight:800;font-size:15px;color:#111111">Code</button>
+          <button onClick="{{ tabOut }}" style="background:{{ tabs.outBg }};border:2px solid #111111;border-bottom:0;border-radius:10px 10px 0 0;padding:9px 18px;margin-bottom:-2px;cursor:pointer;font-family:'League Spartan',sans-serif;font-weight:800;font-size:15px;color:#111111">Output</button>
+          <button onClick="{{ tabPlot }}" title="{{ plotTabTitle }}" style="background:{{ tabs.plotBg }};border:2px {{ tabs.plotBs }} {{ tabs.plotBc }};border-bottom:0;border-radius:10px 10px 0 0;padding:9px 18px;margin-bottom:-2px;cursor:pointer;font-family:'League Spartan',sans-serif;font-weight:800;font-size:15px;color:{{ tabs.plotFg }};text-decoration:{{ tabs.plotDeco }}">Plot</button>
+          <button onClick="{{ tabProb }}" style="display:flex;align-items:center;gap:8px;background:{{ tabs.probBg }};border:2px solid #111111;border-bottom:0;border-radius:10px 10px 0 0;padding:9px 18px;margin-bottom:-2px;cursor:pointer;font-family:'League Spartan',sans-serif;font-weight:800;font-size:15px;color:#111111">Problems<span style="font-family:'Space Mono',monospace;font-size:11px;font-weight:700;background:{{ tabs.badgeBg }};color:{{ tabs.badgeFg }};padding:0 7px;border-radius:999px">{{ probCount }}</span></button>
+        </div>
+
+        <sc-if value="{{ onCode }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1.5px dashed rgba(17,17,17,.25)">
+            <span style="font-family:'Space Mono',monospace;font-size:12px;color:#444444">{{ fileName }}</span>
+            <sc-if value="{{ setA }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;gap:2px;background:#111111;border:2px solid #111111;border-radius:10px;overflow:hidden;box-shadow:3px 3px 0 #111111">
+                <sc-for list="{{ langs }}" as="lg" hint-placeholder-count="3">
+                  <button onClick="{{ lg.pick }}" title="{{ lg.title }}" style="border:0;padding:6px 16px;font-family:'League Spartan',sans-serif;font-weight:800;font-size:14px;cursor:{{ lg.cursor }};background:{{ lg.aBg }};color:{{ lg.aFg }};text-decoration:{{ lg.deco }}">{{ lg.label }}</button>
+                </sc-for>
+              </div>
+            </sc-if>
+            <sc-if value="{{ setB }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;gap:7px;padding-bottom:4px">
+                <sc-for list="{{ langs }}" as="lg" hint-placeholder-count="3">
+                  <button onClick="{{ lg.pick }}" title="{{ lg.title }}" style="border:2px {{ lg.bs }} {{ lg.bc }};border-radius:6px;padding:5px 14px;font-family:'League Spartan',sans-serif;font-weight:800;font-size:14px;cursor:{{ lg.cursor }};background:{{ lg.bBg }};color:{{ lg.aFg }};text-decoration:{{ lg.deco }};box-shadow:{{ lg.sh }};transform:{{ lg.shift }}">{{ lg.label }}</button>
+                </sc-for>
+              </div>
+            </sc-if>
+            <sc-if value="{{ setC }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;align-items:center;gap:2px;padding:3px;border-radius:999px;background:{{ th.c2 }};border:2px solid #111111;font-family:'DM Sans',sans-serif;font-weight:700;font-size:14px">
+                <sc-for list="{{ langs }}" as="lg" hint-placeholder-count="3">
+                  <span onClick="{{ lg.pick }}" title="{{ lg.title }}" style="padding:4px 14px;border-radius:999px;cursor:{{ lg.cursor }};background:{{ lg.cBg }};color:{{ lg.cFg }};text-decoration:{{ lg.deco }};box-shadow:{{ lg.cSh }};transition:background .18s">{{ lg.label }}</span>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+          <sc-if value="{{ pyOnly }}" hint-placeholder-val="{{ false }}">
+            <div style="margin:14px 18px 0;padding:11px 14px;background:{{ th.c1 }};border:2px solid #111111;border-radius:10px;font-size:13px;line-height:1.5">SQL is off: <i>for each</i> and <i>print</i> have no SQL equivalent. The data blocks inside still compile to pandas.</div>
+          </sc-if>
+          <div style="flex:1;overflow:auto;padding:18px 0;font-family:'Space Mono',monospace;font-size:14px;line-height:1.9">
+            <sc-for list="{{ lines }}" as="line" hint-placeholder-count="10">
+              <div style="display:grid;grid-template-columns:48px minmax(0,1fr);padding-right:20px;background:{{ line.bg }};transition:background .12s">
+                <span style="text-align:right;padding-right:14px;color:#AAAAAA">{{ line.n }}</span>
+                <span style="white-space:pre"><sc-for list="{{ line.toks }}" as="tk" hint-placeholder-count="1"><span style="color:{{ tk.c }};font-weight:{{ tk.w }};font-style:{{ tk.st }}">{{ tk.s }}</span></sc-for></span>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ onOut }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:14px 18px;font-family:'DM Sans',sans-serif;font-weight:500;font-size:13px;color:#444444">{{ status }}</div>
+          <sc-if value="{{ showTable }}" hint-placeholder-val="{{ false }}">
+            <div style="margin:0 18px;border:2px solid #111111;border-radius:12px;overflow:hidden;font-family:'Space Mono',monospace;font-size:13px">
+              <div style="display:grid;grid-template-columns:32px minmax(0,1.4fr) minmax(0,1fr) 60px;padding:9px 12px;background:{{ th.acc }};border-bottom:2px solid #111111;font-family:'League Spartan',sans-serif;font-weight:800;font-size:14px"><span></span><span>dept</span><span style="text-align:right">avg_grade</span><span style="text-align:right">n</span></div>
+              <sc-for list="{{ rows }}" as="r" hint-placeholder-count="5">
+                <div style="display:grid;grid-template-columns:32px minmax(0,1.4fr) minmax(0,1fr) 60px;padding:8px 12px;border-bottom:1px solid {{ th.c2 }}"><span style="color:#AAAAAA">{{ r.i }}</span><span>{{ r.dept }}</span><span style="text-align:right">{{ r.avg }}</span><span style="text-align:right">{{ r.n }}</span></div>
+              </sc-for>
+            </div>
+          </sc-if>
+          <sc-if value="{{ showStdout }}" hint-placeholder-val="{{ false }}">
+            <div style="margin:0 18px;padding:14px 16px;background:#111111;color:{{ th.c1 }};border-radius:12px;box-shadow:5px 5px 0 {{ th.acc }};font-family:'Space Mono',monospace;font-size:12.5px;line-height:1.7;white-space:pre">{{ stdout }}</div>
+          </sc-if>
+          <sc-if value="{{ showErr }}" hint-placeholder-val="{{ false }}">
+            <div onClick="{{ focusPrint }}" style="margin:0 18px;padding:16px 18px;background:{{ th.c0 }};border:2px solid #111111;border-radius:12px;box-shadow:5px 5px 0 #C42828;display:flex;flex-direction:column;gap:8px;cursor:pointer" style-hover="background:{{ th.c1 }}">
+              <div style="font-family:'League Spartan',sans-serif;font-weight:800;font-size:18px;color:#A01C1C">NameError on line 14</div>
+              <div style="font-size:14px;line-height:1.5"><span style="font-family:'Space Mono',monospace">best</span> is used before it has a value. Add a <b>Set var</b> block above the loop, or pick a column instead.</div>
+              <div style="font-size:13px;font-weight:600;text-decoration:underline;text-underline-offset:3px">Show me the block →</div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ notRan }}" hint-placeholder-val="{{ true }}">
+            <div style="margin:0 18px 18px;flex:1;border:2px dashed #111111;border-radius:12px;background:{{ th.c0 }};display:flex;align-items:center;justify-content:center;font-size:15px;color:#444444">Press Run to see the result</div>
+          </sc-if>
+        </sc-if>
+
+        <sc-if value="{{ onPlot }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:18px;padding:16px 18px 18px;flex:1;min-height:0;overflow:auto">
+            <sc-if value="{{ noPlots }}" hint-placeholder-val="{{ false }}">
+              <div style="flex:1;min-height:200px;border:2px dashed #111111;border-radius:12px;background:{{ th.c0 }};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;font-size:15px;color:#444444">No plot blocks yet<button onClick="{{ addPlot }}" style="font-family:'DM Sans',sans-serif;font-weight:700;font-size:13px;padding:6px 14px;border:2px solid #111111;border-radius:999px;background:#FFFFFF;box-shadow:0 3px 0 #111111;cursor:pointer">+ Add a plot</button></div>
+            </sc-if>
+            <sc-for list="{{ plotCards }}" as="pc" hint-placeholder-count="1">
+              <div style="display:flex;flex-direction:column;gap:10px">
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                  <span style="font-family:'League Spartan',sans-serif;font-weight:800;font-size:16px;margin-right:4px">{{ pc.title }}</span>
+                  <sc-for list="{{ pc.types }}" as="ct" hint-placeholder-count="4">
+                    <button onClick="{{ ct.pick }}" style="font-family:'DM Sans',sans-serif;font-weight:700;font-size:12px;padding:4px 12px;border:2px solid #111111;border-radius:999px;background:{{ ct.bg }};color:#111111;box-shadow:{{ ct.sh }};cursor:pointer">{{ ct.label }}</button>
+                  </sc-for>
+                  <span style="margin-left:auto;font-family:'Space Mono',monospace;font-size:11px;color:#444444">{{ pc.call }}</span>
+                </div>
+                <div style="position:relative;height:260px;box-sizing:border-box;border:2px solid #111111;border-radius:12px;background:#FFFFFF;padding:22px 22px 44px 56px;filter:{{ plotFilter }};opacity:{{ plotOpacity }}">
+                  <div style="position:absolute;left:14px;top:22px;bottom:44px;display:flex;flex-direction:column;justify-content:space-between;font-family:'Space Mono',monospace;font-size:11px;color:#444444">
+                    <sc-for list="{{ pc.d.yTicks }}" as="yt" hint-placeholder-count="5"><span>{{ yt }}</span></sc-for>
+                  </div>
+                  <div style="position:relative;height:100%;border-left:2px solid #111111;border-bottom:2px solid #111111">
+                    <sc-for list="{{ pc.d.grid }}" as="g" hint-placeholder-count="3"><div style="position:absolute;left:0;right:0;bottom:{{ g }};border-top:1px dashed {{ th.c2 }}"></div></sc-for>
+                    <sc-if value="{{ pc.isBar }}" hint-placeholder-val="{{ true }}">
+                      <div style="position:absolute;inset:0;display:flex;align-items:flex-end;justify-content:space-around;gap:14px;padding:0 14px">
+                        <sc-for list="{{ pc.d.bars }}" as="br" hint-placeholder-count="5">
+                          <div style="position:relative;flex:1;max-width:64px;height:{{ br.h }};background:{{ th.acc }};border:2px solid #111111;border-bottom:0;border-radius:6px 6px 0 0;transition:height .3s">
+                            <span style="position:absolute;top:-20px;left:0;right:0;text-align:center;font-family:'Space Mono',monospace;font-size:11px">{{ br.v }}</span>
+                            <span style="position:absolute;bottom:-26px;left:-10px;right:-10px;text-align:center;font-family:'DM Sans',sans-serif;font-size:12px;white-space:nowrap">{{ br.label }}</span>
+                          </div>
+                        </sc-for>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{ pc.isPts }}" hint-placeholder-val="{{ false }}">
+                      <sc-if value="{{ pc.isLine }}" hint-placeholder-val="{{ false }}">
+                        <svg viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;overflow:visible"><polyline points="{{ pc.d.line }}" fill="none" stroke="#111111" stroke-width="2" vector-effect="non-scaling-stroke"></polyline></svg>
+                      </sc-if>
+                      <sc-for list="{{ pc.d.pts }}" as="pt" hint-placeholder-count="5">
+                        <div style="position:absolute;left:{{ pt.x }};bottom:{{ pt.y }};width:14px;height:14px;margin:0 0 -7px -7px;border-radius:50%;background:{{ th.acc }};border:2px solid #111111"></div>
+                        <span style="position:absolute;left:{{ pt.x }};bottom:-26px;transform:translateX(-50%);font-family:'DM Sans',sans-serif;font-size:12px;white-space:nowrap">{{ pt.label }}</span>
+                      </sc-for>
+                    </sc-if>
+                  </div>
+                </div>
+              </div>
+            </sc-for>
+            <sc-if value="{{ canDropPlot }}" hint-placeholder-val="{{ false }}">
+              <sc-if value="{{ hasPlots }}" hint-placeholder-val="{{ true }}">
+                <button onClick="{{ addPlot }}" style="align-self:flex-start;font-family:'DM Sans',sans-serif;font-weight:700;font-size:13px;padding:6px 14px;border:2px solid #111111;border-radius:999px;background:#FFFFFF;box-shadow:0 3px 0 #111111;cursor:pointer">+ Add another plot</button>
+              </sc-if>
+            </sc-if>
+            <sc-if value="{{ plotDetached }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:#F5F5F5;border:2px dashed #888888;border-radius:10px;font-size:14px;line-height:1.45;color:#444444">
+                <span>SQL has no plotting, so the plot blocks are detached and paused. Switch to Python or R to reattach it.</span>
+                <button onClick="{{ pickPy }}" style="margin-left:auto;flex-shrink:0;font-family:'DM Sans',sans-serif;font-weight:700;font-size:13px;padding:6px 14px;border:2px solid #111111;border-radius:999px;background:#FFFFFF;cursor:pointer">Python</button>
+                <button onClick="{{ pickR }}" style="flex-shrink:0;font-family:'DM Sans',sans-serif;font-weight:700;font-size:13px;padding:6px 14px;border:2px solid #111111;border-radius:999px;background:#FFFFFF;cursor:pointer">R</button>
+              </div>
+            </sc-if>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ onProb }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:10px;padding:16px 18px">
+            <sc-for list="{{ problems }}" as="p" hint-placeholder-count="2">
+              <div onClick="{{ p.go }}" style="display:grid;grid-template-columns:62px minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 14px;border:2px solid #111111;border-radius:10px;box-shadow:3px 3px 0 #111111;cursor:pointer;background:#FFFFFF" style-hover="background:{{ th.c0 }}">
+                <span style="font-family:'DM Sans',sans-serif;font-weight:700;font-size:11px;padding:2px 8px;border-radius:999px;text-align:center;background:{{ p.bg }};color:{{ p.fg }}">{{ p.sev }}</span>
+                <span style="font-size:14px;line-height:1.45">{{ p.msg }}</span>
+                <span style="font-family:'DM Sans',sans-serif;font-weight:600;font-size:12px;color:#666666">{{ p.where }}</span>
+              </div>
+            </sc-for>
+            <sc-if value="{{ noProblems }}" hint-placeholder-val="{{ true }}">
+              <div style="padding:10px 2px;font-size:15px;color:#444444">No problems. This program exports to SQL, Python and R.</div>
+            </sc-if>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section data-screen-label="Button options" style="padding:24px 64px 96px;display:flex;flex-direction:column;gap:20px">
+  <h2 style="margin:0;font-family:'League Spartan',sans-serif;font-weight:900;font-size:44px;letter-spacing:-.01em">Button options</h2>
+  <p style="margin:0;max-width:640px;font-size:16px;line-height:1.6;color:#444444">Three sets for Run, Export, the language toggle and the disabled SQL state. Switch the editor between them in Tweaks.</p>
+  <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:stretch;padding-top:8px">
+
+    <div id="1a" style="width:440px;background:#FFFFFF;border:2px solid #111111;border-radius:16px;box-shadow:6px 6px 0 #111111;padding:28px;display:flex;flex-direction:column;gap:22px">
+      <div style="display:flex;align-items:center;gap:10px"><span style="font-family:'Space Mono',monospace;font-weight:700;font-size:12px;background:#111111;color:#FDE8E8;padding:2px 10px;border-radius:999px">1a</span><span style="font-family:'League Spartan',sans-serif;font-weight:800;font-size:24px">Chunky</span></div>
+      <p style="margin:0;font-size:14px;line-height:1.6;color:#444444">Thick outline and a hard diagonal shadow that collapses when pressed, like an old desktop app.</p>
+      <div style="display:flex;flex-wrap:wrap;gap:14px">
+        <button style="display:flex;align-items:center;gap:9px;background:#ED7070;color:#111111;border:2px solid #111111;border-radius:10px;padding:9px 18px;box-shadow:4px 4px 0 #111111;font-family:'League Spartan',sans-serif;font-weight:800;font-size:15px;white-space:nowrap;cursor:pointer" style-active="transform:translate(2px,2px);box-shadow:2px 2px 0 #111111"><svg width="11" height="11" viewBox="0 0 10 10"><path d="M2 1l7 4-7 4z" fill="currentColor"></path></svg>Run SQL</button>
+        <button style="background:#FFFFFF;color:#111111;border:2px solid #111111;border-radius:10px;padding:9px 18px;box-shadow:4px 4px 0 #111111;font-family:'League Spartan',sans-serif;font-weight:800;font-size:15px;white-space:nowrap;cursor:pointer" style-active="transform:translate(2px,2px);box-shadow:2px 2px 0 #111111">Export .sql</button>
+        <button style="background:#111111;color:#FDE8E8;border:2px solid #111111;border-radius:10px;padding:9px 16px;box-shadow:4px 4px 0 #ED7070;font-family:'League Spartan',sans-serif;font-weight:800;font-size:15px;cursor:pointer">+ Add CSV</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <span style="font-size:13px;color:#666666">Toggle: normal, then SQL off</span>
+        <div style="display:flex;gap:18px;flex-wrap:wrap;font-family:'League Spartan',sans-serif;font-weight:800;font-size:14px">
+          <div style="display:flex;border:2px solid #111111;border-radius:10px;overflow:hidden;box-shadow:3px 3px 0 #111111"><span style="padding:6px 16px;background:#111111;color:#FDE8E8;border-right:2px solid #111111">SQL</span><span style="padding:6px 16px;background:#FFFFFF">Python</span></div>
+          <div style="display:flex;border:2px solid #111111;border-radius:10px;overflow:hidden;box-shadow:3px 3px 0 #111111"><span style="padding:6px 16px;background:#F5F5F5;color:#888888;text-decoration:line-through;border-right:2px solid #111111">SQL</span><span style="padding:6px 16px;background:#111111;color:#FDE8E8">Python</span></div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <span style="font-size:13px;color:#666666">Disabled: shadow gone, outline dashed</span>
+        <button disabled="disabled" style="align-self:flex-start;background:#F5F5F5;color:#666666;border:2px dashed #888888;border-radius:10px;padding:9px 18px;font-family:'League Spartan',sans-serif;font-weight:800;font-size:15px;cursor:not-allowed">Export .sql</button>
+      </div>
+    </div>
+
+    <div id="1b" style="width:440px;background:#FFFFFF;border:2px solid #111111;border-radius:16px;box-shadow:6px 6px 0 #111111;padding:28px;display:flex;flex-direction:column;gap:22px">
+      <div style="display:flex;align-items:center;gap:10px"><span style="font-family:'Space Mono',monospace;font-weight:700;font-size:12px;background:#111111;color:#FDE8E8;padding:2px 10px;border-radius:999px">1b</span><span style="font-family:'League Spartan',sans-serif;font-weight:800;font-size:24px">Brick</span></div>
+      <p style="margin:0;font-size:14px;line-height:1.6;color:#444444">Buttons share the blocks' studs and press down on click. The toggle is two bricks; the active one stands up.</p>
+      <div style="display:flex;flex-wrap:wrap;gap:14px;padding-top:6px">
+        <button style="position:relative;display:flex;align-items:center;gap:9px;background:#ED7070;color:#111111;border:2px solid #111111;border-radius:6px;padding:9px 18px;box-shadow:0 4px 0 #111111;font-family:'League Spartan',sans-serif;font-weight:800;font-size:15px;white-space:nowrap;cursor:pointer" style-active="transform:translateY(3px);box-shadow:0 1px 0 #111111"><span style="position:absolute;top:-7px;left:12px;width:15px;height:7px;background:#ED7070;border:2px solid #111111;border-bottom:0;border-radius:4px 4px 0 0"></span><span style="position:absolute;top:-7px;left:33px;width:15px;height:7px;background:#ED7070;border:2px solid #111111;border-bottom:0;border-radius:4px 4px 0 0"></span><svg width="11" height="11" viewBox="0 0 10 10"><path d="M2 1l7 4-7 4z" fill="currentColor"></path></svg>Run SQL</button>
+        <button style="position:relative;background:#FFFFFF;color:#111111;border:2px solid #111111;border-radius:6px;padding:9px 18px;box-shadow:0 4px 0 #111111;font-family:'League Spartan',sans-serif;font-weight:800;font-size:15px;white-space:nowrap;cursor:pointer" style-active="transform:translateY(3px);box-shadow:0 1px 0 #111111"><span style="position:absolute;top:-7px;left:12px;width:15px;height:7px;background:#FFFFFF;border:2px solid #111111;border-bottom:0;border-radius:4px 4px 0 0"></span><span style="position:absolute;top:-7px;left:33px;width:15px;height:7px;background:#FFFFFF;border:2px solid #111111;border-bottom:0;border-radius:4px 4px 0 0"></span>Export .sql</button>
+        <button style="background:#111111;color:#FDE8E8;border:2px solid #111111;border-radius:16px 16px 6px 6px;padding:9px 16px;box-shadow:0 4px 0 #ED7070;font-family:'League Spartan',sans-serif;font-weight:800;font-size:15px;cursor:pointer">+ Add CSV</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <span style="font-size:13px;color:#666666">Toggle: normal, then SQL off</span>
+        <div style="display:flex;gap:18px;flex-wrap:wrap;font-family:'League Spartan',sans-serif;font-weight:800;font-size:14px">
+          <div style="display:flex;gap:7px"><span style="border:2px solid #111111;border-radius:6px;padding:5px 14px;background:#111111;color:#FDE8E8;box-shadow:0 4px 0 #ED7070">SQL</span><span style="border:2px solid #111111;border-radius:6px;padding:5px 14px;background:#FDE8E8;transform:translateY(3px)">Python</span></div>
+          <div style="display:flex;gap:7px"><span style="border:2px dashed #888888;border-radius:6px;padding:5px 14px;background:#F5F5F5;color:#888888;text-decoration:line-through;transform:translateY(3px)">SQL</span><span style="border:2px solid #111111;border-radius:6px;padding:5px 14px;background:#111111;color:#FDE8E8;box-shadow:0 4px 0 #ED7070">Python</span></div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <span style="font-size:13px;color:#666666">Disabled: flattened, no studs</span>
+        <button disabled="disabled" style="align-self:flex-start;background:#F5F5F5;color:#666666;border:2px dashed #888888;border-radius:6px;padding:9px 18px;font-family:'League Spartan',sans-serif;font-weight:800;font-size:15px;cursor:not-allowed">Export .sql</button>
+      </div>
+    </div>
+
+    <div id="1c" style="width:440px;background:#FFFFFF;border:2px solid #111111;border-radius:16px;box-shadow:6px 6px 0 #111111;padding:28px;display:flex;flex-direction:column;gap:22px">
+      <div style="display:flex;align-items:center;gap:10px"><span style="font-family:'Space Mono',monospace;font-weight:700;font-size:12px;background:#111111;color:#FDE8E8;padding:2px 10px;border-radius:999px">1c</span><span style="font-family:'League Spartan',sans-serif;font-weight:800;font-size:24px">Soft</span></div>
+      <p style="margin:0;font-size:14px;line-height:1.6;color:#444444">Round pills on a raised base, with a sliding switch for the language toggle. The friendliest of the three.</p>
+      <div style="display:flex;flex-wrap:wrap;gap:14px">
+        <button style="display:flex;align-items:center;gap:9px;background:#111111;color:#FDE8E8;border:2px solid #111111;border-radius:999px;padding:9px 22px;box-shadow:0 4px 0 #ED7070;font-family:'DM Sans',sans-serif;font-weight:700;font-size:14px;white-space:nowrap;cursor:pointer" style-active="transform:translateY(3px);box-shadow:0 1px 0 #ED7070"><svg width="11" height="11" viewBox="0 0 10 10"><path d="M2 1l7 4-7 4z" fill="currentColor"></path></svg>Run SQL</button>
+        <button style="background:#FAD0D0;color:#111111;border:2px solid #111111;border-radius:999px;padding:9px 22px;box-shadow:0 4px 0 #111111;font-family:'DM Sans',sans-serif;font-weight:700;font-size:14px;white-space:nowrap;cursor:pointer" style-active="transform:translateY(3px);box-shadow:0 1px 0 #111111">Export .sql</button>
+        <button style="background:#FFFFFF;color:#111111;border:2px solid #111111;border-radius:999px;padding:9px 20px;box-shadow:0 4px 0 #111111;font-family:'DM Sans',sans-serif;font-weight:700;font-size:14px;cursor:pointer">Add CSV</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <span style="font-size:13px;color:#666666">Toggle: normal, then SQL off</span>
+        <div style="display:flex;gap:26px;flex-wrap:wrap;font-family:'DM Sans',sans-serif;font-weight:700;font-size:14px">
+          <div style="display:flex;align-items:center;gap:10px"><span>SQL</span><span style="position:relative;width:54px;height:30px;border-radius:999px;background:#FAD0D0;border:2px solid #111111"><span style="position:absolute;top:2px;left:3px;width:22px;height:22px;border-radius:50%;background:#111111;box-shadow:0 2px 0 #ED7070"></span></span><span style="color:#888888">Python</span></div>
+          <div style="display:flex;align-items:center;gap:10px"><span style="color:#888888;text-decoration:line-through">SQL</span><span style="position:relative;width:54px;height:30px;border-radius:999px;background:#E8E8E8;border:2px solid #111111"><span style="position:absolute;top:2px;left:25px;width:22px;height:22px;border-radius:50%;background:#111111;box-shadow:0 2px 0 #ED7070"></span></span><span>Python</span></div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <span style="font-size:13px;color:#666666">Disabled: base removed</span>
+        <button disabled="disabled" style="align-self:flex-start;background:#F5F5F5;color:#666666;border:2px dashed #888888;border-radius:999px;padding:9px 22px;font-family:'DM Sans',sans-serif;font-weight:700;font-size:14px;cursor:not-allowed">Export .sql</button>
+      </div>
+    </div>
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;buttonSet&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;a&quot;,&quot;b&quot;,&quot;c&quot;],&quot;default&quot;:&quot;c&quot;,&quot;tsType&quot;:&quot;'a'|'b'|'c'&quot;,&quot;section&quot;:&quot;Buttons&quot;},&quot;hoverExplainers&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Explainers&quot;}}">
+class Component extends DCLogic {
+  state = { lang: 'sql', pyOnly: false, err: false, hov: null, focus: null, ran: false, ranLang: 'sql', dropping: false, tab: 'code', blocks: [{ id: 1, type: 'src' }, { id: 2, type: 'join', v: 0 }, { id: 3, type: 'where', v: 0 }, { id: 4, type: 'group' }, { id: 5, type: 'having' }, { id: 6, type: 'order' }, { id: 7, type: 'limit' }, { id: 8, type: 'plot', chart: 'bar' }], nextId: 20 };
+
+  static PAL = {
+    sql: {
+      src:    { bg: '#E04A4F', fg: '#111111', code: '#7A1414' },
+      join:   { bg: '#E8605F', fg: '#111111', code: '#A51E22' },
+      where:  { bg: '#EE7676', fg: '#111111', code: '#B8262B' },
+      group:  { bg: '#F28C8C', fg: '#111111', code: '#B73A38' },
+      having: { bg: '#F6A3A6', fg: '#111111', code: '#A8403F' },
+      order:  { bg: '#F9BCBF', fg: '#111111', code: '#A8444F' },
+      limit:  { bg: '#FCD6D9', fg: '#111111', code: '#9E4452' },
+    },
+    py: {
+      src:    { bg: '#6A7FEE', fg: '#111111', code: '#1E2A6B' },
+      join:   { bg: '#7D8DF0', fg: '#111111', code: '#2F45A8' },
+      where:  { bg: '#8F95F1', fg: '#111111', code: '#3F52BE' },
+      group:  { bg: '#A29DF2', fg: '#111111', code: '#4A4FC0' },
+      having: { bg: '#B5AAF5', fg: '#111111', code: '#5A44B8' },
+      order:  { bg: '#C8BAF7', fg: '#111111', code: '#6A44B0' },
+      limit:  { bg: '#DCCDF9', fg: '#111111', code: '#6B48A8' },
+    },
+    r: {
+      src:    { bg: '#4CB363', fg: '#111111', code: '#1E6B33' },
+      join:   { bg: '#62BE74', fg: '#111111', code: '#23753A' },
+      where:  { bg: '#78C886', fg: '#111111', code: '#2A7D40' },
+      group:  { bg: '#8FD199', fg: '#111111', code: '#2F7F45' },
+      having: { bg: '#A6DBAD', fg: '#111111', code: '#357F4A' },
+      order:  { bg: '#BDE5C2', fg: '#111111', code: '#3A7D4E' },
+      limit:  { bg: '#D4EFD7', fg: '#111111', code: '#3E7A52' },
+    },
+  };
+
+  static THEMES = { sql: { c0: '#FFF5F5', c1: '#FDE8E8', c2: '#FAD0D0', acc: '#ED7070' }, py: { c0: '#F5F6FF', c1: '#E6E9FD', c2: '#D0D6FA', acc: '#7D8DF0' }, r: { c0: '#F4FBF5', c1: '#E3F4E6', c2: '#C9EACF', acc: '#62BE74' } };
+  static GEO = { s: 13, w: 11.26, h: 6.5, ox: 75, oy: 66 };
+  static CAP = {
+    src: 'Loads the table. Every cube is one row of enrolments.',
+    join: 'Lines up rows from both tables that share the same course_id.',
+    where: 'Lights up the rows where the condition holds and drops the rest.',
+    group: 'Pulls rows with the same dept into piles, then squashes each pile into one result row.',
+    having: 'Like Where, but for the piles: groups with too few rows are dropped.',
+    order: 'Reshuffles the results so the highest avg_grade comes first.',
+    limit: 'Keeps the first few rows and drops everything after.',
+    plot: 'Draws each result row as a bar.',
+    loop: 'Steps through the results one row at a time.',
+    print: 'Writes the current row to the output.',
+  };
+  static hex(c) { const n = parseInt(c.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
+  static shade(c, to, u) { return 'rgb(' + Component.hex(c).map(v => Math.round(v + (to - v) * u)).join(',') + ')'; }
+  static lerpC(a, b, u) { const A = Component.hex(a), B = Component.hex(b); return '#' + A.map((v, i) => Math.round(v + (B[i] - v) * u).toString(16).padStart(2, '0')).join(''); }
+  static scenes(eff) {
+    Component._sc = Component._sc || {};
+    if (Component._sc[eff]) return Component._sc[eff];
+    const T = Component.THEMES[eff], P = Component.PAL[eff];
+    const n = T.c2, a = T.acc, A = P.src.bg, B = P.group.bg, Cc = P.limit.bg;
+    const cube = (f, kf) => { let p = { x: 0, y: 0, z: 0, o: 1, g: 0, f }; return { kf: kf.map(([t, d]) => { p = { ...p, ...d }; return [t, p]; }) }; };
+    const C = (f, st, mids = []) => cube(f, [[0, { ...st, o: 0 }], [0.25, { o: st.o ?? 1 }], ...mids]);
+    const g3 = i => ({ x: i % 3 - 1, y: Math.floor(i / 3) - 1 });
+    const R = k => [...Array(k).keys()];
+    const xs4 = [-1.8, -0.6, 0.6, 1.8];
+    const sc = {};
+    sc.src = { L: 3.6, cubes: R(9).map(i => C(n, { ...g3(i), z: -4, o: 0 }, [[0.3 + i * 0.12, {}], [0.8 + i * 0.12, { z: 0, o: 1 }]])) };
+    sc.join = { L: 3.6, cubes: R(3).map(i => C(n, { x: -2.6, y: i - 1 }, [[0.7, {}], [1.5, { x: -0.5 }], [1.7, { g: 1 }], [2.5, { g: 0 }]])).concat(R(3).map(i => C(a, { x: 2.6, y: i - 1 }, [[0.7, {}], [1.5, { x: 0.5 }], [1.7, { g: 1 }], [2.5, { g: 0 }]]))) };
+    const sel = [0, 2, 4, 7];
+    sc.where = { L: 3.8, cubes: R(9).map(i => C(n, g3(i), sel.includes(i) ? [[0.7, {}], [1.1, { f: a, g: 1 }], [2.6, {}], [3.0, { g: 0 }]] : [[1.6, {}], [2.3, { z: -4, o: 0 }]])) };
+    const cols = [A, B, Cc, B, A, Cc, Cc, A, B], colX = { [A]: -1, [B]: 0, [Cc]: 1 }, seen = {};
+    sc.group = { L: 4.4, cubes: cols.map((f, i) => { const slot = seen[f] = (seen[f] ?? -1) + 1; const to = { x: colX[f], y: slot - 1 }; return C(f, g3(i), [[0.7, {}], [1.5, to], [2.1, {}], ...(slot === 0 ? [[2.7, { g: 1 }], [3.5, { g: 0 }]] : [[2.7, { y: -1, o: 0 }]])]); }) };
+    sc.having = { L: 3.6, cubes: [3, 1, 2].flatMap((hgt, p) => R(hgt).map(k => C(n, { x: (p - 1) * 1.5, y: 0, z: k }, hgt === 1 ? [[0.8, {}], [1.1, { f: a, g: 1 }], [1.7, {}], [2.3, { z: -4, o: 0 }]] : []))) };
+    const H = [2, 4, 1, 3], tgt = [2, 0, 3, 1];
+    sc.order = { L: 3.8, cubes: H.flatMap((hgt, j) => R(hgt).map(k => C(n, { x: xs4[j], y: 0, z: k }, [[0.8, {}], [1.8, { x: xs4[tgt[j]] }], [2.0, { g: 1 }], [2.7, { g: 0 }]]))) };
+    sc.limit = { L: 3.8, cubes: R(7).map(i => C(n, { x: i - 3, y: 0 }, i < 5 ? [[0.7, {}], [1.1, { f: a, g: 1 }], [2.5, {}], [2.9, { g: 0 }]] : [[1.5, {}], [2.2, { z: -4, o: 0 }]])) };
+    sc.plot = { L: 3.8, cubes: [3, 4, 2, 1].flatMap((hgt, j) => R(hgt).map(k => k === 0 ? C(a, { x: xs4[j], y: 0 }) : C(a, { x: xs4[j], y: 0, o: 0 }, [[0.5 + k * 0.25, {}], [1.0 + k * 0.25, { z: k, o: 1 }]]))) };
+    sc.loop = { L: 4.0, cubes: R(4).map(i => C(n, { x: i - 1.5, y: 0 }, [[0.6 + i * 0.7, {}], [0.8 + i * 0.7, { f: a, g: 1 }], [1.3 + i * 0.7, { f: n, g: 0 }]])).concat([C('#111111', { x: -1.5, y: 0, z: 1.7 }, R(3).flatMap(i => [[0.9 + i * 0.7, {}], [1.3 + i * 0.7, { x: i - 0.5 }]]))]) };
+    sc.print = sc.loop;
+    Object.values(sc).forEach(s => { s.acc = a; s.cubes.forEach(c => { const last = c.kf[c.kf.length - 1][1]; if (c.kf[c.kf.length - 1][0] < s.L - 0.45) c.kf.push([s.L - 0.45, last], [s.L - 0.05, { ...last, o: 0 }]); }); });
+    return (Component._sc[eff] = sc);
+  }
+  static at(kf, t) {
+    if (t <= kf[0][0]) return kf[0][1];
+    for (let i = 1; i < kf.length; i++) if (t <= kf[i][0]) {
+      const [t0, p] = kf[i - 1], [t1, q] = kf[i], r = (t - t0) / (t1 - t0 || 1), u = r < 0.5 ? 4 * r * r * r : 1 - Math.pow(-2 * r + 2, 3) / 2;
+      return { x: p.x + (q.x - p.x) * u, y: p.y + (q.y - p.y) * u, z: p.z + (q.z - p.z) * u, o: p.o + (q.o - p.o) * u, g: p.g + (q.g - p.g) * u, f: p.f === q.f ? p.f : Component.lerpC(p.f, q.f, u) };
+    }
+    return kf[kf.length - 1][1];
+  }
+  diagram(type, eff, width) {
+    const { s, w, h } = Component.GEO, sc = Component.scenes(eff)[type];
+    if (!sc) return null;
+    const e = React.createElement, face = { stroke: '#111111', strokeWidth: 1.5, strokeLinejoin: 'round' };
+    const top = `0,0 ${w},${-h} 0,${-2 * h} ${-w},${-h}`, left = `0,0 ${-w},${-h} ${-w},${s - h} 0,${s}`, right = `0,0 ${w},${-h} ${w},${s - h} 0,${s}`, hex = `0,${-2 * h} ${w},${-h} ${w},${s - h} 0,${s} ${-w},${s - h} ${-w},${-h}`;
+    return e('svg', { key: type + eff, viewBox: '0 0 150 120', width, height: Math.round(width * 0.8), 'data-scene': type, 'data-eff': eff, style: { display: 'block', overflow: 'visible' } },
+      sc.cubes.map((c, i) => e('g', { key: i, opacity: 0 },
+        e('polygon', { points: hex, fill: 'none', stroke: sc.acc, strokeWidth: 6, strokeLinejoin: 'round', opacity: 0 }),
+        e('polygon', { points: top, ...face }), e('polygon', { points: left, ...face }), e('polygon', { points: right, ...face }))));
+  }
+  tick(now) {
+    const { s, w, h, ox, oy } = Component.GEO;
+    document.querySelectorAll('svg[data-scene]').forEach(svg => {
+      const sc = (Component.scenes(svg.dataset.eff) || {})[svg.dataset.scene];
+      if (!sc) return;
+      let t0 = this._t0.get(svg);
+      if (t0 == null) { t0 = now; this._t0.set(svg, t0); }
+      const t = ((now - t0) / 1000) % sc.L, gs = Array.from(svg.children), keyed = [];
+      gs.forEach((g, i) => {
+        const c = sc.cubes[i]; if (!c) return;
+        const st = Component.at(c.kf, t), [gl, tp, lf, rt] = g.children;
+        g.setAttribute('transform', `translate(${(ox + (st.x - st.y) * w).toFixed(2)},${(oy + (st.x + st.y) * h - st.z * s).toFixed(2)})`);
+        g.setAttribute('opacity', st.o.toFixed(3));
+        gl.setAttribute('opacity', st.g.toFixed(3));
+        tp.setAttribute('fill', Component.shade(st.f, 255, 0.38)); lf.setAttribute('fill', st.f); rt.setAttribute('fill', Component.shade(st.f, 0, 0.22));
+        keyed.push([st.x + st.y + st.z * 0.9, g]);
+      });
+      keyed.sort((p, q) => p[0] - q[0]);
+      if (keyed.some(([, g], i) => g !== gs[i])) keyed.forEach(([, g]) => svg.appendChild(g));
+    });
+  }
+  componentDidMount() {
+    this._t0 = new WeakMap();
+    const loop = now => { this.tick(now); this._raf = requestAnimationFrame(loop); };
+    this._raf = requestAnimationFrame(loop);
+  }
+  componentWillUnmount() { cancelAnimationFrame(this._raf); }
+
+  tokenize(t, lang, col) {
+    if (lang === 'r') {
+      const q = (c, w, st) => [{ s: t, c, w, st }];
+      if (/^(---|```)/.test(t)) return q('#888888', 700, 'normal');
+      if (/^\w[\w-]*:/.test(t) && !t.includes('<-')) return q('#5A5A5A', 400, 'normal');
+      if (t.startsWith('## ')) return q('#111111', 700, 'normal');
+      if (t.startsWith('#|')) return q('#2A7D40', 400, 'italic');
+    }
+    const kw = lang === 'sql'
+      ? /\b(SELECT|FROM|JOIN|USING|WHERE|GROUP BY|HAVING|ORDER BY|LIMIT|AS|DESC|ASC)\b/
+      : lang === 'r' ? /\b(library|for|in|function|TRUE|FALSE)\b/ : /\b(import|as|for|in|on)\b/;
+    const fn = lang === 'sql' ? /\b(AVG|COUNT|SUM|MIN|MAX)(?=\()/ : lang === 'r' ? /\b(read_csv|left_join|filter|group_by|summarise|mean|n|arrange|desc|slice_head|ggplot|aes|geom_col|geom_line|geom_point|geom_histogram|print|paste|seq_len|nrow)(?=\()|\|>|<-|>=?/ : /\b(read_csv|merge|groupby|agg|sort_values|head|itertuples|print)(?=\()|>=?/;
+    const str = /"[^"]*"/;
+    const re = new RegExp(`(${str.source})|(${kw.source})|(${fn.source})`, 'g');
+    const out = []; let last = 0, m;
+    while ((m = re.exec(t))) {
+      if (m.index > last) out.push({ s: t.slice(last, m.index), c: 'inherit', w: 400, st: 'normal' });
+      if (m[1]) out.push({ s: m[0], c: '#2E6B4F', w: 400, st: 'normal' });
+      else out.push({ s: m[0], c: col || '#111111', w: 700, st: 'normal' });
+      last = m.index + m[0].length;
+    }
+    if (last < t.length) out.push({ s: t.slice(last), c: 'inherit', w: 400, st: 'normal' });
+    return out;
+  }
+
+  chartData(CH, rows) {
+    const kind = CH[1];
+    if (kind === 'hist') {
+      const bins = [[70, 72], [72, 74], [74, 76], [76, 78], [78, 80]];
+      const c = bins.map(([a, b]) => rows.filter(r => +r[1] >= a && +r[1] < b).length);
+      return { yTicks: ['2', '1.5', '1', '0.5', '0'], grid: ['25%', '50%', '75%'], bars: bins.map(([a, b], i) => ({ h: (c[i] / 2 * 100) + '%', v: c[i], label: a + '–' + b })), pts: [], line: '' };
+    }
+    const lo = 70, hi = 80, yp = v => ((v - lo) / (hi - lo)) * 100;
+    const yTicks = ['80', '77.5', '75', '72.5', '70'], grid = ['25%', '50%', '75%'];
+    if (kind === 'bar') return { yTicks, grid, bars: rows.map(r => ({ h: yp(+r[1]) + '%', v: r[1], label: r[0] })), pts: [], line: '' };
+    const xs = kind === 'scatter' ? rows.map(r => ((r[2] - 10) / 50) * 100) : rows.map((r, i) => 10 + i * 20);
+    const pts = rows.map((r, i) => ({ x: xs[i] + '%', y: yp(+r[1]) + '%', label: kind === 'scatter' ? 'n=' + r[2] : r[0] }));
+    return { yTicks, grid, bars: [], pts, line: rows.map((r, i) => xs[i] + ',' + (100 - yp(+r[1]))).join(' ') };
+  }
+
+  renderVals() {
+    const rows0 = [['Mathematics', '78.4', 42], ['Physics', '76.1', 28], ['English', '74.9', 51], ['History', '72.3', 33], ['Biology', '71.8', 19]];
+    const { lang, err, hov, focus, ran, ranLang, dropping, tab, blocks } = this.state;
+    const ORD = { src: 0, join: 1, where: 2, group: 3, having: 4, order: 5, limit: 6, plot: 7, loop: 8 };
+    const JOINS = [['courses', 'course_id'], ['students', 'student_id']];
+    const WHERES = [
+      { col: 'grade', op: '>', val: '50', sql: 'grade > 50', py: 'df["grade"] > 50', r: 'grade > 50' },
+      { col: 'term', op: '=', val: '"S1"', sql: "term = 'S1'", py: 'df["term"] == "S1"', r: 'term == "S1"' },
+      { col: 'grade', op: '<', val: '95', sql: 'grade < 95', py: 'df["grade"] < 95', r: 'grade < 95' },
+    ];
+    const by = ty => blocks.filter(b => b.type === ty), has = ty => blocks.some(b => b.type === ty), K = b => 'b' + b.id;
+    const src = by('src')[0], joins = by('join'), wheres = by('where'), grp = by('group')[0], hav = by('having')[0], ordB = by('order')[0], limB = by('limit')[0], loopB = by('loop')[0], plotsB = by('plot');
+    const ordCol = grp ? 'avg_grade' : 'grade';
+    const pyOnly = !!loopB;
+    const set = this.props.buttonSet ?? 'c';
+    const eff = pyOnly && lang === 'sql' ? 'py' : lang;
+    const T = Component.THEMES[eff];
+    const showEx = this.props.hoverExplainers !== false;
+    const KW = {
+      sql: { src: 'FROM', join: 'JOIN', using: 'USING', where: 'WHERE', group: 'GROUP BY', avg: 'avg', as: 'AS', count: 'count', having: 'HAVING', order: 'ORDER BY', limit: 'LIMIT', rows: 'rows', plot: 'plot' },
+      py: { src: 'read_csv', join: 'merge', using: 'on', where: 'filter', group: 'groupby', avg: 'mean', as: '=', count: 'size', having: 'filter', order: 'sort_values', limit: 'head', rows: '', plot: 'plot' },
+      r: { src: 'read_csv', join: 'left_join', using: 'by', where: 'filter', group: 'group_by', avg: 'mean', as: '=', count: 'n', having: 'filter', order: 'arrange', limit: 'slice_head', rows: '', plot: 'ggplot' },
+    };
+    const plotAtt = plotsB.length > 0 && eff !== 'sql';
+    const CHS = { bar: ['Bar', 'bar', 'dept', 'avg_grade'], line: ['Line', 'line', 'dept', 'avg_grade'], scatter: ['Scatter', 'scatter', 'n', 'avg_grade'], hist: ['Histogram', 'hist', 'avg_grade', 'count'] };
+    const GEOM = { bar: ['x = dept, y = avg_grade', 'geom_col()'], line: ['x = dept, y = avg_grade, group = 1', 'geom_line() + geom_point()'], scatter: ['x = n, y = avg_grade', 'geom_point()'], hist: ['x = avg_grade', 'geom_histogram(bins = 5)'] };
+    const pl = plotsB.map(p => {
+      const CH = CHS[p.chart], geom = GEOM[p.chart];
+      const call = CH[1] === 'hist' ? 'out["avg_grade"].plot.hist(bins=5)' : `out.plot.${CH[1]}(x="${CH[2]}", y="${CH[3]}")`;
+      return { ...p, key: K(p), CH, geom, call, gg: `ggplot(out, aes(${geom[0]})) + ${geom[1]}` };
+    });
+    const sql = [];
+    if (grp) sql.push(['SELECT dept,', [K(grp)]], ['       AVG(grade) AS avg_grade,', [K(grp)]], ['       COUNT(*) AS n', [K(grp)]]);
+    else sql.push(['SELECT *', [K(src)]]);
+    sql.push(['FROM enrolments', [K(src)]]);
+    joins.forEach(j => sql.push([`JOIN ${JOINS[j.v][0]} USING (${JOINS[j.v][1]})`, [K(j)]]));
+    wheres.forEach((w, i) => sql.push([(i ? '  AND ' : 'WHERE ') + WHERES[w.v].sql, [K(w)]]));
+    if (grp) sql.push(['GROUP BY dept', [K(grp)]]);
+    if (hav) sql.push(['HAVING COUNT(*) >= 10', [K(hav)]]);
+    if (ordB) sql.push([`ORDER BY ${ordCol} DESC`, [K(ordB)]]);
+    if (limB) sql.push(['LIMIT 5', [K(limB)]]);
+    sql[sql.length - 1] = [sql[sql.length - 1][0] + ';', sql[sql.length - 1][1]];
+    const py = [['import pandas as pd', []]];
+    if (plotAtt) py.push(['import matplotlib.pyplot as plt', pl.map(p => p.key)]);
+    py.push(['', []], ['enrolments = pd.read_csv("data/enrolments.csv")', [K(src)]]);
+    joins.forEach(j => py.push([`${JOINS[j.v][0]} = pd.read_csv("data/${JOINS[j.v][0]}.csv")`, [K(j)]]));
+    if (!joins.length) py.push(['df = enrolments', [K(src)]]);
+    joins.forEach((j, i) => py.push([`df = ${i ? 'df' : 'enrolments'}.merge(${JOINS[j.v][0]}, on="${JOINS[j.v][1]}")`, [K(j)]]));
+    wheres.forEach(w => py.push([`df = df[${WHERES[w.v].py}]`, [K(w)]]));
+    if (grp) py.push(['out = df.groupby("dept", as_index=False).agg(', [K(grp)]], ['    avg_grade=("grade", "mean"), n=("grade", "size"))', [K(grp)]]);
+    else py.push(['out = df', []]);
+    if (hav) py.push(['out = out[out["n"] >= 10]', [K(hav)]]);
+    if (ordB) py.push([`out = out.sort_values("${ordCol}", ascending=False)`, [K(ordB)]]);
+    if (limB) py.push(['out = out.head(5)', [K(limB)]]);
+    if (pyOnly) py.push(['', []], ['for row in out.itertuples():', ['loop']], [err ? '    print(best, row.avg_grade)' : '    print(row.dept, row.avg_grade)', ['loop', 'print']]);
+    if (plotAtt) pl.forEach(p => py.push(['', []], [p.call, [p.key]], ['plt.show()', [p.key]]));
+    const rr = [
+      ['---', []], ['title: "Department grades"', []], ['format: html', []], ['---', []], ['', []],
+      ['## Top departments', []], ['', []],
+      ['```{r}', []], ['#| label: load', []], ['#| message: false', []],
+      ['library(dplyr)', []], ['library(readr)', []],
+      ['enrolments <- read_csv("data/enrolments.csv")', [K(src)]],
+    ];
+    joins.forEach(j => rr.push([`${JOINS[j.v][0]} <- read_csv("data/${JOINS[j.v][0]}.csv")`, [K(j)]]));
+    rr.push(['```', []], ['', []], ['```{r}', []], ['#| label: summarise', []]);
+    const steps = [];
+    joins.forEach(j => steps.push([`left_join(${JOINS[j.v][0]}, by = "${JOINS[j.v][1]}")`, K(j)]));
+    wheres.forEach(w => steps.push([`filter(${WHERES[w.v].r})`, K(w)]));
+    if (grp) steps.push(['group_by(dept)', K(grp)], ['summarise(avg_grade = mean(grade), n = n())', K(grp)]);
+    if (hav) steps.push(['filter(n >= 10)', K(hav)]);
+    if (ordB) steps.push([`arrange(desc(${ordCol}))`, K(ordB)]);
+    if (limB) steps.push(['slice_head(n = 5)', K(limB)]);
+    if (!steps.length) rr.push(['out <- enrolments', [K(src)]]);
+    else { rr.push(['out <- enrolments |>', [K(src)]]); steps.forEach(([s, k], i) => rr.push(['  ' + s + (i < steps.length - 1 ? ' |>' : ''), [k]])); }
+    rr.push(['out', []], ['```', []]);
+    if (pyOnly) rr.push(['', []], ['```{r}', []], ['for (i in seq_len(nrow(out))) {', ['loop']], ['  print(paste(out$dept[i], out$avg_grade[i]))', ['loop', 'print']], ['}', ['loop']], ['```', []]);
+    if (plotAtt) pl.forEach((p, i) => rr.push(['', []], ['```{r}', []], [`#| label: fig-grades-${i + 1}`, [p.key]], [`#| fig-cap: "Figure ${i + 1}"`, [p.key]], ...(i === 0 ? [['library(ggplot2)', [p.key]]] : []), [`ggplot(out, aes(${p.geom[0]})) +`, [p.key]], ['  ' + p.geom[1], [p.key]], ['```', []]));
+    const typeOf = { loop: 'loop', print: 'loop' };
+    blocks.forEach(b => { typeOf[K(b)] = b.type; });
+    const active = focus || hov;
+    const lines = (eff === 'sql' ? sql : eff === 'r' ? rr : py).map(([t, b], i) => ({
+      n: i + 1, t: t || ' ', toks: this.tokenize(t || ' ', eff, (Component.PAL[eff][typeOf[b[0]]] || {}).code), bg: active && b.includes(active) ? T.c2 : 'transparent',
+    }));
+    const tipFor = b => {
+      const J = JOINS[b.v || 0], W = WHERES[b.v || 0];
+      return {
+        src: ['FROM enrolments', 'pd.read_csv("data/enrolments.csv")', 'read_csv("data/enrolments.csv")'],
+        join: [`JOIN ${J[0]} USING (${J[1]})`, `.merge(${J[0]}, on="${J[1]}")`, `left_join(${J[0]}, by = "${J[1]}")`],
+        where: ['WHERE ' + W.sql, `df[${W.py}]`, `filter(${W.r})`],
+        group: ['GROUP BY dept · AVG(grade)', '.groupby("dept").agg(avg_grade=("grade","mean"))', 'group_by(dept) |> summarise(...)'],
+        having: ['HAVING COUNT(*) >= 10', 'out[out["n"] >= 10]', 'filter(n >= 10)'],
+        order: [`ORDER BY ${ordCol} DESC`, `.sort_values("${ordCol}", ascending=False)`, `arrange(desc(${ordCol}))`],
+        limit: ['LIMIT 5', '.head(5)', 'slice_head(n = 5)'],
+      }[b.type];
+    };
+    const tips = { loop: ['none', 'for row in out.itertuples():', 'for (i in seq_len(nrow(out)))'], print: ['none', 'print(...)', 'print(paste(...))'] };
+    blocks.forEach(b => { if (b.type !== 'plot' && b.type !== 'loop') tips[K(b)] = tipFor(b); });
+    pl.forEach(p => { tips[p.key] = ['none (detaches in SQL)', p.call, p.gg]; });
+    const hv = {}, ol = {};
+    Object.keys(tips).forEach(k => {
+      hv[k] = () => this.setState({ hov: k });
+      ol[k] = focus === k ? '3px solid #C42828' : 'none';
+    });
+    const t = hov && tips[hov];
+    const addBlock = type => this.setState(s => {
+      const n = s.blocks.filter(x => x.type === type).length;
+      const nb = { id: s.nextId, type };
+      if (type === 'join') nb.v = n % JOINS.length;
+      if (type === 'where') nb.v = n % WHERES.length;
+      if (type === 'plot') nb.chart = ['bar', 'line', 'scatter', 'hist'][n % 4];
+      const list = s.blocks.concat(nb).map((x, i) => [x, i]).sort((p, q) => ORD[p[0].type] - ORD[q[0].type] || p[1] - q[1]).map(x => x[0]);
+      return { blocks: list, nextId: s.nextId + 1, hov: null, focus: null, ran: false };
+    });
+    const removeType = type => this.setState(s => ({ blocks: s.blocks.filter(x => x.type !== type), err: type === 'loop' ? false : s.err, ran: false, hov: null, focus: null }));
+    const kwl = KW[eff];
+    const dataB = blocks.filter(b => b.type !== 'plot' && b.type !== 'loop');
+    const vis = dataB.concat(plotsB);
+    const lastAtt = plotAtt ? vis.length - 1 : dataB.length - 1;
+    const stack = vis.map((b, i) => {
+      const att = i <= lastAtt, isPlot = b.type === 'plot';
+      const P = isPlot ? { bg: eff === 'r' ? '#E3F4E6' : '#ECE6FB' } : Component.PAL[eff][b.type];
+      const sty = att
+        ? { bg: P.bg, fg: '#111111', bs: 'solid', bc: '#111111', r: `${i === 0 ? '18px 18px' : '0 0'} ${i === lastAtt ? '12px 12px' : '0 0'}`, mt: i === 0 ? '0' : '-2px', tf: 'none', sh: i === lastAtt ? '0 5px 0 #111111' : 'none', stud: i < lastAtt, as: 'stretch' }
+        : { bg: '#EDEDED', fg: '#666666', bs: 'dashed', bc: '#888888', r: '12px', mt: i === lastAtt + 1 ? '26px' : '12px', tf: `translateX(${28 + (i - lastAtt - 1) * 10}px) rotate(${(i - lastAtt) % 2 ? -1.5 : 1}deg)`, sh: 'none', stud: false, as: 'flex-start' };
+      const k = K(b), J = JOINS[b.v || 0], W = WHERES[b.v || 0], p = pl.find(q => q.id === b.id);
+      const pills = { join: [J[0] + ' ▾', kwl.using, J[1] + ' ▾', '', ''], order: [ordCol + ' ▾', '', 'high → low ▾', '', ''], limit: ['5', kwl.rows, '', '', ''], plot: p ? [(eff === 'r' ? p.geom[1].split('(')[0] : p.CH[1]) + ' ▾', 'x', p.CH[2] + ' ▾', 'y', p.CH[3] + ' ▾'] : null }[b.type];
+      const expr = { where: [W.col + ' ▾', W.op === '=' && eff !== 'sql' ? '==' : W.op, W.val], having: ['n ▾', '≥', '10'] }[b.type];
+      const tipOn = showEx && hov === k;
+      return { ...sty, label: kwl[b.type], ol: focus === k ? '3px solid #C42828' : 'none', hover: () => this.setState({ hov: k }),
+        showTip: tipOn, diagram: tipOn ? this.diagram(b.type, eff, 136) : null, tipTitle: kwl[b.type], cap: Component.CAP[b.type],
+        tipTop: i === 0 ? 'calc(100% + 14px)' : 'auto', tipBottom: i === 0 ? 'auto' : 'calc(100% + 14px)',
+        isSrc: b.type === 'src', isGroup: b.type === 'group', isPills: !!pills, isExpr: !!expr,
+        p1: pills ? pills[0] : '', s1: pills ? pills[1] : '', p2: pills ? pills[2] : '', s2: pills ? pills[3] : '', p3: pills ? pills[4] : '',
+        hasP2: !!(pills && pills[2]), hasS2: !!(pills && pills[3]), hasP3: !!(pills && pills[4]),
+        e1: expr ? expr[0] : '', eop: expr ? expr[1] : '', e2: expr ? expr[2] : '',
+        detached: !att, removable: b.type !== 'src',
+        remove: () => this.setState(s => ({ blocks: s.blocks.filter(q => q.id !== b.id), hov: null, focus: null, ran: false })) };
+    });
+    const single = ['group', 'having', 'order', 'limit'];
+    const palData = ['join', 'where', 'group', 'having', 'order', 'limit'].map(type => {
+      const dis = (single.includes(type) && has(type)) || (type === 'join' && joins.length >= JOINS.length) || (type === 'where' && wheres.length >= WHERES.length);
+      return { label: type === 'having' && eff !== 'sql' ? 'filter groups' : kwl[type], bg: dis ? '#F5F5F5' : Component.PAL[eff][type].bg, fg: dis ? '#888888' : '#111111', bs: dis ? 'dashed' : 'solid', bc: dis ? '#888888' : '#111111', sh: dis ? 'none' : '0 4px 0 #111111', cursor: dis ? 'not-allowed' : 'pointer', title: dis ? 'Already in the stack' : 'Add to the stack', add: () => { if (!dis) addBlock(type); } };
+    });
+    const palExtra = [['loop', 'For each', !!loopB], ['plot', kwl.plot === 'plot' ? 'Plot' : 'ggplot', false]].map(([type, label, dis]) => ({ label, bg: dis ? '#F5F5F5' : '#FFFFFF', fg: dis ? '#888888' : '#111111', bc: dis ? '#888888' : '#111111', sh: dis ? 'none' : '0 4px 0 #111111', cursor: dis ? 'not-allowed' : 'pointer', title: dis ? 'Already in the stack' : 'Add to the stack', add: () => { if (!dis) addBlock(type); } }));
+    const sOn = eff === 'sql';
+    const sw = {
+      sqlBg: sOn ? '#111111' : (pyOnly ? '#F5F5F5' : (set === 'b' ? T.c1 : '#FFFFFF')),
+      sqlFg: sOn ? T.c1 : (pyOnly ? '#888888' : '#111111'),
+      pyBg: !sOn ? '#111111' : (set === 'b' ? T.c1 : '#FFFFFF'),
+      pyFg: !sOn ? T.c1 : '#111111',
+      sqlDeco: pyOnly ? 'line-through' : 'none',
+      sqlBorder: pyOnly ? 'dashed' : 'solid',
+      sqlShadow: sOn ? '0 4px 0 #ED7070' : 'none',
+      pyShadow: !sOn ? '0 4px 0 #ED7070' : 'none',
+      sqlShift: sOn ? 'none' : 'translateY(3px)',
+      pyShift: !sOn ? 'none' : 'translateY(3px)',
+      knob: sOn ? '3px' : '25px',
+      sqlLabel: sOn ? '#111111' : '#888888',
+      pyLabel: !sOn ? '#111111' : '#888888',
+    };
+    const langs = [['sql', 'SQL'], ['py', 'Python'], ['r', 'R']].map(([k, label]) => {
+      const on = eff === k, off = k === 'sql' && pyOnly;
+      return { label, title: off ? 'for each has no SQL equivalent' : 'Show ' + label,
+        pick: () => { if (!off) this.setState({ lang: k, focus: null }); },
+        cursor: off ? 'not-allowed' : 'pointer', deco: off ? 'line-through' : 'none',
+        aBg: on ? '#111111' : off ? '#F5F5F5' : '#FFFFFF', aFg: on ? T.c1 : off ? '#888888' : '#111111',
+        bBg: on ? '#111111' : off ? '#F5F5F5' : T.c1, bs: off ? 'dashed' : 'solid', bc: off ? '#888888' : '#111111',
+        sh: on ? '0 4px 0 ' + T.acc : 'none', shift: on ? 'none' : 'translateY(3px)',
+        cBg: on ? '#111111' : 'transparent', cFg: on ? T.c1 : off ? '#888888' : '#111111', cSh: on ? '0 2px 0 ' + T.acc : 'none' };
+    });
+    const goTo = k => () => this.setState({ focus: k, hov: null });
+    const problems = [];
+    if (ran && ranLang === 'py' && err && pyOnly) problems.push({ sev: 'Error', msg: 'NameError: best is used before it has a value', where: 'Print · L14', go: goTo('print'), bg: '#C42828', fg: '#FFFFFF' });
+    if (pyOnly) {
+      problems.push({ sev: 'SQL', msg: 'for each has no SQL equivalent', where: 'For each', go: goTo('loop'), bg: '#111111', fg: T.c1 });
+      problems.push({ sev: 'SQL', msg: 'print has no SQL equivalent', where: 'Print', go: goTo('print'), bg: '#111111', fg: T.c1 });
+    }
+    if (hav && !grp) problems.push({ sev: 'Check', msg: 'HAVING needs a Group by block above it', where: 'Having', go: goTo(K(hav)), bg: '#FFFFFF', fg: '#111111' });
+    const hasErr = problems.some(p => p.sev === 'Error');
+    const tb = on => on ? '#FFFFFF' : T.c2;
+    const tabs = {
+      codeBg: tb(tab === 'code'), plotBg: eff === 'sql' ? '#EDEDED' : tb(tab === 'plot'), plotFg: eff === 'sql' ? '#888888' : '#111111', plotBs: eff === 'sql' ? 'dashed' : 'solid', plotBc: eff === 'sql' ? '#888888' : '#111111', plotDeco: eff === 'sql' ? 'line-through' : 'none', outBg: tb(tab === 'output'), probBg: tb(tab === 'problems'),
+      badgeBg: hasErr ? '#C42828' : (problems.length ? '#111111' : '#FFFFFF'),
+      badgeFg: hasErr ? '#FFFFFF' : (problems.length ? T.c1 : '#666666'),
+    };
+    const rows = [['Mathematics', '78.4', 42], ['Physics', '76.1', 28], ['English', '74.9', 51], ['History', '72.3', 33], ['Biology', '71.8', 19]]
+      .map(([dept, avg, n], i) => ({ i: i + 1, dept, avg, n }));
+    const ranErr = ran && err && pyOnly && ranLang === 'py';
+    const ranLoop = ran && pyOnly && !err && ranLang !== 'sql';
+    const tipX = (k, title) => ({ show: showEx && hov === k, diagram: hov === k ? this.diagram(k, eff, 136) : null, title, cap: Component.CAP[k] });
+    const gallery = ['src', 'join', 'where', 'group', 'having', 'order', 'limit', 'plot', 'loop'].map(ty => ({ diagram: this.diagram(ty, eff, 150), title: ty === 'loop' ? 'For each' : (kwl[ty] || ty), cap: Component.CAP[ty] }));
+    const erdOpen = !!this.state.erd, en = this.state.erdN || 'crow';
+    const nb = k => en === k ? '#111111' : '#FFFFFF', nf = k => en === k ? T.c1 : '#111111';
+    const erdN = {
+      crowBg: nb('crow'), crowFg: nf('crow'), chenBg: nb('chen'), chenFg: nf('chen'), umlBg: nb('uml'), umlFg: nf('uml'),
+      isBox: en !== 'chen', isCrow: en === 'crow', isUml: en === 'uml', isChen: en === 'chen',
+      r: en === 'uml' ? '4px' : '12px 12px 6px 6px', ta: en === 'uml' ? 'center' : 'left',
+      pk: en === 'crow' ? 'PK ' : '', fk: en === 'crow' ? 'FK ' : (en === 'uml' ? '' : ''),
+      note: { crow: 'One student has many enrolments; one course has many enrolments.', uml: 'Multiplicities read 1 on the student and course side, * on the enrolments side.', chen: 'enrolments has no key of its own, so it reads as the relationship between Student and Course, with grade and term as its attributes.' }[en],
+    };
+    return {
+      erdOpen, erdN, erdBtnBg: erdOpen ? '#111111' : '#FFFFFF', erdBtnFg: erdOpen ? T.c1 : '#111111',
+      erdToggle: () => this.setState(s => ({ erd: !s.erd })), erdClose: () => this.setState({ erd: false }),
+      erdCrow: () => this.setState({ erdN: 'crow' }), erdChen: () => this.setState({ erdN: 'chen' }), erdUml: () => this.setState({ erdN: 'uml' }),
+      tipLoop: tipX('loop', 'For each'), tipPrint: tipX('print', 'Print'), gallery,
+      langs, pickR: () => this.setState({ lang: 'r', focus: null }),
+      setA: set === 'a', setB: set === 'b', setC: set === 'c',
+      pyOnly, dropping, lines, hv, ol, sw, rows, tabs, problems,
+      hasTip: !!t, noTip: !t, tip: { sql: t ? t[0] : '', py: t ? t[1] : '', r: t ? t[2] : '' },
+      stack, palData, palExtra, removeLoop: () => removeType('loop'),
+      onCode: tab === 'code', onOut: tab === 'output', onProb: tab === 'problems',
+      tabCode: () => this.setState({ tab: 'code' }),
+      tabOut: () => this.setState({ tab: 'output' }),
+      tabProb: () => this.setState({ tab: 'problems' }),
+      probCount: problems.length, noProblems: problems.length === 0,
+      notRan: !ran, showTable: ran && !ranErr && !ranLoop, showStdout: ranLoop, showErr: ranErr,
+      stdout: rows.map(r => `${r.dept} ${r.avg}`).join('\n'),
+      printArg1: err ? 'best' : 'row.dept',
+      focusPrint: () => this.setState({ focus: 'print', tab: 'code' }),
+      unhov: () => this.setState({ hov: null }),
+      pickSql: () => { if (!pyOnly) this.setState({ lang: 'sql', focus: null }); },
+      pickPy: () => this.setState({ lang: 'py', focus: null }),
+      toggleLang: () => { if (!pyOnly) this.setState(s => ({ lang: s.lang === 'sql' ? 'py' : 'sql' })); },
+      togglePy: () => loopB ? removeType('loop') : addBlock('loop'),
+      toggleErr: () => this.setState(s => ({ err: !s.err, ran: false, focus: null, blocks: s.blocks.some(x => x.type === 'loop') ? s.blocks : s.blocks.concat({ id: s.nextId, type: 'loop' }), nextId: s.nextId + 1 })),
+      toggleDrop: () => this.setState(s => ({ dropping: !s.dropping })),
+      run: () => this.setState({ ran: true, ranLang: eff, tab: 'output', focus: null }),
+      sqlTitle: pyOnly ? 'for each has no SQL equivalent' : 'Show SQL',
+      fileName: 'department_grades.' + { sql: 'sql', py: 'py', r: 'qmd' }[eff],
+      bc: Component.PAL[eff],
+      plotAttached: plotAtt, plotDetached: plotsB.length > 0 && eff === 'sql',
+      canDropPlot: eff !== 'sql', noPlots: plotsB.length === 0, hasPlots: plotsB.length > 0,
+      plotCards: pl.map((p, i) => ({
+        title: 'Figure ' + (i + 1), call: eff === 'r' ? p.gg : p.call, d: this.chartData(p.CH, rows0),
+        isBar: p.CH[1] === 'bar' || p.CH[1] === 'hist', isPts: p.CH[1] === 'line' || p.CH[1] === 'scatter', isLine: p.CH[1] === 'line',
+        types: ['bar', 'line', 'scatter', 'hist'].map(k => ({ label: CHS[k][0], bg: k === p.chart ? T.acc : '#FFFFFF', sh: k === p.chart ? '0 3px 0 #111111' : 'none',
+          pick: () => this.setState(s => ({ blocks: s.blocks.map(q => q.id === p.id ? { ...q, chart: k } : q) })) })),
+      })),
+      addPlot: () => addBlock('plot'),
+      plotFilter: eff === 'sql' ? 'grayscale(1)' : 'none', plotOpacity: eff === 'sql' ? '.45' : '1',
+      plotTabTitle: eff === 'sql' ? 'Plots run in Python or R' : 'Plot the result',
+      onPlot: tab === 'plot',
+      tabPlot: () => this.setState({ tab: 'plot' }),
+      togglePlot: () => addBlock('plot'),
+      plotToggleLabel: 'Add plot block',
+      th: T,
+      kw: kwl,
+      runLabel: { sql: 'Run SQL', py: 'Run Python', r: 'Render' }[eff],
+      exportLabel: 'Export .' + { sql: 'sql', py: 'py', r: 'qmd' }[eff],
+      pyToggleLabel: pyOnly ? 'Remove for-each loop' : 'Add for-each loop',
+      errToggleLabel: err ? 'Fix the NameError' : 'Cause a NameError',
+      dropToggleLabel: dropping ? 'End CSV drop' : 'Simulate CSV drop',
+      status: ran ? (ranErr ? 'Ran as Python · stopped with an error' : `${ranLang === 'r' ? 'Rendered with Quarto · R (dplyr)' : 'Ran as ' + (ranLang === 'sql' ? 'SQL (SQLite)' : 'Python (pandas)')} · 5 rows · 24 ms`) : 'Not run yet',
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,3 @@
+* { box-sizing: border-box; }
+body { margin: 0; background: #FDE8E8; color: #111111; font-family: 'DM Sans', sans-serif; -webkit-font-smoothing: antialiased; }
+.wordmark { font-family: 'League Spartan', sans-serif; font-weight: 900; text-shadow: 3px 3px 0 #ED7070; }
