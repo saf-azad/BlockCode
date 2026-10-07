@@ -73,7 +73,9 @@ examples/  tests/
 7. **M6 Two-way editing:** editable CodeMirror, debounced parse → blocks, squiggles, Tidy button, Raw-code blocks.
 8. **M7 CSV drop and tables:** drop overlay ("Columns we found"), upload, sidebar tables with types and empty counts, new source block and column dropdowns.
 9. **M8 Run & debug:** Run uses the current language. Output tab (table or stdout), Plot tab, Problems tab with badge, and two-way error ↔ block linking ("Show me the block →").
-10. **M9 Explainers and ERD:** hover isometric animations for all 9 block types, and an ERD panel with crow's foot, Chen and UML notations.
+10. **M9 Explainers and ERD:** an ERD panel with crow's foot, Chen and UML notations, and a hover isometric animation for **every** block type. Each animation must show what the block really does to the rows. Where the v4 design has no scene, we design a new one: new column, select, if/else, while, repeat, set/change var and raw code.
+   - **Join** is redone so it matches rows by key. Key cubes are coloured by value. With an inner join, matching pairs slide together and rows with no match drop away. With a left join, every left row stays and unmatched rows get an empty (hollow) partner cube.
+   - Each scene is checked against the engine. A test runs the block on a tiny table and asserts the row counts and matches the scene animates (for example, inner join 3 + 3 → 2 rows, left join → 3 rows).
 11. **M10 Projects & export:** `*.blockcode.json` save/load, export .sql, .py or .qmd/.R plus data from both the UI and the CLI, examples, friendly-error polish.
 - **Stretch:** functions, subqueries, a compare mode that runs all three targets side by side.
 
