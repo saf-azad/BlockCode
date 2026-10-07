@@ -57,8 +57,11 @@ for (.bc_e in seq_along(.bc_exprs)) {
   .bc_line <- getSrcLocation(.bc_exprs[.bc_e], "line")
   .bc_last <- getSrcLocation(.bc_exprs[.bc_e], "line", first = FALSE)
   .bc_ok <- tryCatch({
-    .bc_v <- withVisible(eval(.bc_exprs[[.bc_e]], envir = globalenv()))
-    if (.bc_v$visible) print(.bc_v$value)
+    .bc_x <- .bc_exprs[[.bc_e]]
+    .bc_v <- withVisible(eval(.bc_x, envir = globalenv()))
+    # a bare result name (Quarto shows the table) is already returned as a table
+    .bc_shown <- is.name(.bc_x) && as.character(.bc_x) %%in%% .bc_names
+    if (.bc_v$visible && !.bc_shown) print(.bc_v$value)
     TRUE
   }, error = function(e) {
     cl <- conditionCall(e)

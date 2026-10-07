@@ -131,6 +131,7 @@ def test_r_loop_and_plot_run(store):
     assert result.ok, result.error
     assert '[1] "Mathematics' in result.stdout
     assert '[1] "three rows"' in result.stdout
+    assert "A tibble" not in result.stdout  # the result table isn't printed twice
     assert len(result.plots) == 1
 
 

@@ -17,7 +17,7 @@ function layout(erd: Erd): Box[] {
   const rest = order.slice(1);
   const row: typeof order = [];
   rest.forEach((t, i) => (i % 2 === 0 ? row.unshift(t) : row.push(t)));
-  if (hub) row.splice(Math.floor(row.length / 2) + (rest.length % 2 === 0 ? 0 : 1) - (rest.length ? 1 : 0), 0, hub);
+  if (hub) row.splice(Math.floor(row.length / 2), 0, hub); // the most-linked table goes in the middle
   const perRow = 3;
   return row.map((t, i) => {
     const r = Math.floor(i / perRow);

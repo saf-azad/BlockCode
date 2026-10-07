@@ -101,3 +101,27 @@ examples/  tests/
   6. Cause a NameError and click it to check the right block is outlined.
   7. Add a plot and check it detaches in SQL and renders in Python.
   8. Export all three.
+
+## Status
+
+All milestones M0–M10 are built and tested. Each one was pushed as its own commit on
+`claude/dazzling-fermi-k9njli`.
+
+| Area | Where | Tests |
+|---|---|---|
+| Engine: IR, plan, SQL / pandas / dplyr codegen with source maps | `blockcode/` | `tests/test_codegen.py`, `tests/test_golden.py` |
+| SQL ≡ pandas ≡ R result tables (null cases too) | `blockcode/run/` | `tests/test_equivalence.py`, `tests/test_properties.py` |
+| Code → blocks (SQL, Python, R) | `blockcode/parse/` | `tests/test_roundtrip.py`, `tests/test_parse_handwritten.py`, property tests |
+| Python/R-only blocks, plots, error → block | `blockcode/codegen/python.py`, `r.py` | `tests/test_imperative.py` |
+| CSV ingest, projects, export, ERD, API, CLI | `blockcode/` | `tests/test_server.py`, `tests/test_cli.py`, `tests/test_export.py` |
+| Hover animations tell the truth | `web/src/explainers/` | `tests/test_explainers.py`, `scenes.test.ts` |
+| Editor (v4 design) | `web/src/` | `web/e2e/editor.spec.ts` (Playwright) |
+
+Open `/?gallery` to see every hover animation at once.
+
+Known limits in v1:
+- A new column that a later Group by or Select drops has no SQL of its own. The validator warns
+  about this.
+- `NOT IN` on a column with empty values and `SUM` over only-empty groups follow SQL in SQL, but
+  pandas and R return different results.
+- LIKE patterns with `%` or `_` in the middle, subqueries and window functions are not blocks yet.
