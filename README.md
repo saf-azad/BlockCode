@@ -21,4 +21,8 @@ uv run blockcode serve       # http://127.0.0.1:8000
 uv run pytest                # engine, API and CLI tests
 (cd web && npm run dev)      # Vite dev server, proxies /api to :8000
 (cd web && npm test)         # frontend unit tests
+(cd web && npm run build && npm run e2e)   # browser tests (Playwright) against the real engine
 ```
+
+R is optional: R code is always generated and exported, and runs when `Rscript` (with dplyr,
+readr, stringr and ggplot2) is installed.

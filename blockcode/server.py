@@ -76,8 +76,12 @@ def create_app(projects_dir: Path | None = None) -> FastAPI:
 
     @app.get("/api/projects/{name}")
     def get_project(name: str) -> Project:
-        if not store.exists(name) and name == "school":
-            return store.create("school", "Department grades")
+        """Opening a project that doesn't exist yet creates it with the school sample."""
+        if not store.exists(name):
+            try:
+                return store.create(name)
+            except ProjectError as exc:
+                raise HTTPException(400, str(exc)) from exc
         return load(name)
 
     @app.put("/api/projects/{name}/program")
@@ -103,13 +107,40 @@ def create_app(projects_dir: Path | None = None) -> FastAPI:
     @app.post("/api/projects/{name}/generate")
     def gen(name: str, body: ProgramIn) -> dict:
         project = load(name)
-        out = generate(body.program, project.tables, target_ok(body.target))
-        return out.model_dump()
+        target = target_ok(body.target)
+        extra = {"title": project.title or project.name} if target == "r" else {}
+        return generate(body.program, project.tables, target, **extra).model_dump()
 
     @app.post("/api/projects/{name}/generate-all")
     def gen_all(name: str, body: ProgramIn) -> dict:
+        """Code, source map and problems for every language at once (the editor shows the
+        hovered block in all three)."""
+        from blockcode.validate import validate
+
         project = load(name)
-        return {t: generate(body.program, project.tables, t).model_dump() for t in TARGETS}
+        tables = {t.name: t for t in project.tables}
+        out = {}
+        for t in TARGETS:
+            extra = {"title": project.title or project.name} if t == "r" else {}
+            g = generate(body.program, tables, t, **extra)
+            g.diagnostics = validate(body.program, tables, t, generated=g)
+            out[t] = g.model_dump()
+        return out
+
+    @app.get("/api/examples")
+    def examples() -> dict:
+        from blockcode.examples import TITLES
+
+        return {"examples": [{"name": k, "title": v} for k, v in TITLES.items()]}
+
+    @app.get("/api/examples/{example}")
+    def example(example: str) -> Program:
+        from blockcode.examples import school
+
+        progs = school()
+        if example not in progs:
+            raise HTTPException(404, "No such example.")
+        return progs[example]
 
     @app.post("/api/projects/{name}/validate")
     def check(name: str, body: ProgramIn) -> dict:
@@ -139,7 +170,8 @@ def create_app(projects_dir: Path | None = None) -> FastAPI:
     def erd(name: str) -> dict:
         from blockcode.erd import infer_erd
 
-        return infer_erd(load(name).tables).model_dump()
+        project = load(name)
+        return infer_erd(project.tables, store.ensure_db(project.name)).model_dump()
 
     @app.post("/api/projects/{name}/export")
     def export(name: str, body: ProgramIn) -> Response:

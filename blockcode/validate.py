@@ -7,8 +7,10 @@ from blockcode.diagnostics import Diagnostic, error, warning
 from blockcode.ir import Block, Program, TableInfo
 
 
-def validate(program: Program, tables: dict[str, TableInfo], target: str) -> list[Diagnostic]:
-    diags = list(generate(program, tables, target).diagnostics)
+def validate(program: Program, tables: dict[str, TableInfo], target: str,
+             generated=None) -> list[Diagnostic]:
+    gen = generated if generated is not None else generate(program, tables, target)
+    diags = list(gen.diagnostics)
     if target != "sql":
         diags += check_variables(program)
     seen: set[tuple] = set()

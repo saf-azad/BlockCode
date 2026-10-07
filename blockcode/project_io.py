@@ -52,7 +52,7 @@ class ProjectStore:
         if self.exists(name):
             raise ProjectError(f'A project called "{name}" already exists.')
         (d / "data").mkdir(parents=True, exist_ok=True)
-        project = Project(name=d.name, title=title or name)
+        project = Project(name=d.name, title=title or ("Department grades" if sample else name))
         if sample:
             for csv in sorted(SAMPLE_DIR.glob("*.csv")):
                 shutil.copy(csv, d / "data" / csv.name)

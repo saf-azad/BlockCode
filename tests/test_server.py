@@ -59,3 +59,41 @@ def test_run_maps_error_to_block(tmp_path):
     assert run["error"]["kind"] == "NameError"
     assert run["error"]["block_id"] == p.id
     assert "best is used before it has a value" in run["error"]["message"]
+
+
+def test_erd_matches_school_design(tmp_path):
+    c = client(tmp_path)
+    c.get("/api/projects/school")
+    erd = c.get("/api/projects/school/erd").json()
+    links = {(link["one"], link["many"], link["column"], link["kind"]) for link in erd["links"]}
+    assert links == {("students", "enrolments", "student_id", "1-*"),
+                     ("courses", "enrolments", "course_id", "1-*")}
+    assert ["courses", "students"] in [sorted(p) for p in erd["unlinked"]]
+    enrol = next(t for t in erd["tables"] if t["name"] == "enrolments")
+    assert {c["name"] for c in enrol["columns"] if c["fk"]} == {"student_id", "course_id"}
+    students = next(t for t in erd["tables"] if t["name"] == "students")
+    assert [c["name"] for c in students["columns"] if c["pk"]] == ["student_id"]
+
+
+def test_parse_endpoint_keeps_ids(tmp_path):
+    c = client(tmp_path)
+    project = c.get("/api/projects/school").json()
+    prog = project["program"]
+    sql = c.post("/api/projects/school/generate", json={"program": prog, "target": "sql"}).json()
+    edited = sql["code"].replace("LIMIT 5", "LIMIT 2")
+    r = c.post("/api/projects/school/parse",
+               json={"code": edited, "lang": "sql", "previous": prog}).json()
+    assert r["ok"]
+    steps = r["program"]["blocks"][0]["stacks"]["steps"]
+    assert steps[-1]["fields"]["n"] == 2
+    assert steps[-1]["id"] == prog["blocks"][0]["stacks"]["steps"][-1]["id"]
+
+
+def test_erd_ignores_coincidental_names(tmp_path):
+    c = client(tmp_path)
+    c.get("/api/projects/school")
+    c.post("/api/projects/school/data",
+           files={"file": ("pets.csv", (FIXTURES / "pets.csv").read_bytes(), "text/csv")})
+    erd = c.get("/api/projects/school/erd").json()
+    assert all(link["column"] != "name" for link in erd["links"])
+    assert len(erd["links"]) == 2
