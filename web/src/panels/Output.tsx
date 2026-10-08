@@ -8,7 +8,7 @@ export function Output() {
   const doRun = useRun();
   const lang = effectiveLang(state);
   if (!run) {
-    if (state.running) return <div className="status running">Running {LANG_LABEL[lang]}…</div>;
+    if (state.running) return <div className="status running" data-testid="run-note">{state.runNote ?? `Running ${LANG_LABEL[lang]}…`}</div>;
     return (
       <div className="placeholder" style={{ marginTop: 18 }}>
         Press Run to see the result
@@ -47,7 +47,7 @@ export function RunStatus() {
   const last = run.tables[run.tables.length - 1];
   const rows = last ? `${last.total_rows.toLocaleString()} row${last.total_rows === 1 ? '' : 's'}` : '';
   let note = '';
-  if (state.running) note = ' · updating…';
+  if (state.running) note = ` · ${state.runNote ?? 'updating…'}`;
   else if (run.target !== lang) note = ' · the language has changed since, press Run again';
   else if (runIsStale(state)) note = ' · the blocks have changed since, fix the problems to update';
   return (

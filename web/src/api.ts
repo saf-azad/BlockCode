@@ -1,4 +1,4 @@
-import type { Erd, Generated, Lang, ParseResult, Program, Project, RunResult, TableInfo, BlockSpec } from './types';
+import type { BlockSpec, Erd, Generated, Job, Lang, ParseResult, Program, Project, Raw, RunResult, RuntimeConfig, TableInfo } from './types';
 
 async function call<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
@@ -31,6 +31,11 @@ export const api = {
     call<Record<Lang, Generated>>(`${p(name)}/generate-all`, json({ program, target: 'sql' })),
   run: (name: string, program: Program, target: Lang) =>
     call<RunResult>(`${p(name)}/run`, json({ program, target })),
+  runtime: () => call<RuntimeConfig>('/api/runtime'),
+  job: (name: string, program: Program, target: Lang) =>
+    call<{ job?: Job; result?: RunResult }>(`${p(name)}/job`, json({ program, target })),
+  finish: (name: string, program: Program, target: Lang, raw: Raw) =>
+    call<RunResult>(`${p(name)}/finish`, json({ program, target, raw })),
   parse: (name: string, code: string, lang: Lang, previous: Program) =>
     call<ParseResult>(`${p(name)}/parse`, json({ code, lang, previous })),
   upload: async (name: string, file: File) => {

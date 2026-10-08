@@ -24,6 +24,7 @@ export interface State {
   tab: Tab;
   run: RunResult | null;
   running: boolean;
+  runNote: string | null; // what a run is waiting on ("Installing ggplot2…")
   editing: Editing | null;
   saved: 'saved' | 'saving' | 'unsaved';
   dropping: boolean;
@@ -47,6 +48,7 @@ export const initialState: State = {
   tab: 'code',
   run: null,
   running: false,
+  runNote: null,
   editing: null,
   saved: 'saved',
   dropping: false,
@@ -67,7 +69,8 @@ export type Action =
   | { type: 'hover'; id: string | null }
   | { type: 'focus'; id: string | null }
   | { type: 'tab'; tab: Tab }
-  | { type: 'running' }
+  | { type: 'running'; auto?: boolean }
+  | { type: 'runnote'; text: string | null }
   | { type: 'ran'; run: RunResult; auto?: boolean }
   | { type: 'edit'; text: string }
   | { type: 'parsed'; parse: ParseResult; text: string }
@@ -132,7 +135,10 @@ export function reducer(s: State, a: Action): State {
     case 'tab':
       return { ...s, tab: a.tab };
     case 'running':
-      return { ...s, running: true };
+      // pressing Run shows the Output tab at once, so you can see what it's waiting on
+      return { ...s, running: true, runNote: null, tab: a.auto || s.tab === 'plot' ? s.tab : 'output' };
+    case 'runnote':
+      return s.running ? { ...s, runNote: a.text } : s;
     case 'ran': {
       // a run started by an edit updates the results in place; pressing Run shows them,
       // staying on the Plot tab if that's where you pressed it
@@ -140,7 +146,7 @@ export function reducer(s: State, a: Action): State {
       if (!a.auto && !(s.tab === 'plot' && a.run.plots.length)) {
         tab = a.run.ok && a.run.plots.length && !a.run.tables.length && !a.run.stdout ? 'plot' : 'output';
       }
-      return { ...s, running: false, run: a.run, tab };
+      return { ...s, running: false, runNote: null, run: a.run, tab };
     }
     case 'edit': {
       const lang = effectiveLang(s);

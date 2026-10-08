@@ -205,3 +205,25 @@ test('drag and drop: palette to stack, table to workspace, block into a loop', a
   await drag(page, page.getByRole('button', { name: 'Print', exact: true }), page.locator('[data-type="foreach"] .drop-end'), 0);
   await expect(page.locator('[data-type="foreach"] [data-type="print"]')).toBeVisible();
 });
+
+test('Python and R run in the browser, plots and all', async ({ page, request }) => {
+  const cfg = await (await request.get('/api/runtime')).json();
+  test.skip(cfg.run_in !== 'browser', 'Python and R run on the server here');
+  const calls: string[] = [];
+  page.on('request', (r) => { const m = r.url().match(/\/api\/projects\/[^/]+\/(run|job|finish)$/); if (m) calls.push(m[1]); });
+  await open(page);
+  for (const lang of ['Python', 'R']) {
+    calls.length = 0;
+    await page.getByRole('tab', { name: 'Code' }).click();
+    await page.getByRole('tab', { name: lang, exact: true }).click();
+    await page.getByRole('button', { name: lang === 'R' ? 'ggplot' : 'Plot', exact: true }).click();
+    await page.getByTestId('run').click();
+    await expect(page.getByTestId('run-status')).toContainText(`Ran as ${lang} · 5 rows · 1 plot`, { timeout: 200_000 });
+    await expect(page.getByTestId('output-plot')).toBeVisible();
+    // ran here, not on the server (switching language re-runs too, so there may be more)
+    expect(calls).toContain('finish');
+    expect(calls).not.toContain('run');
+    await expect(page.getByTestId('result').first()).toContainText('Mathematics');
+    await page.locator('[data-type="plot"] button[aria-label="Remove block"]').click();
+  }
+});

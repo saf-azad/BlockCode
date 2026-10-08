@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { api } from './api';
 import { Panel } from './panels/Panel';
 import { startRun } from './panels/run';
+import { warm } from './runtime';
 import { ErdPanel } from './sidebar/Erd';
 import { Sidebar } from './sidebar/Sidebar';
 import { DndProvider } from './stack/dnd';
@@ -63,6 +64,13 @@ function useEngine() {
     const t = setTimeout(() => startRun(stateRef.current, dispatch, true), 350);
     return () => clearTimeout(t);
   }, [gen, lang, state.running, dispatch]);
+
+  // Python and R run in the browser: start downloading them as soon as their tab is picked
+  const code = state.generated?.[lang]?.code;
+  const haveCode = code !== undefined;
+  useEffect(() => {
+    if (lang !== 'sql' && haveCode) warm(lang, stateRef.current.generated?.[lang]?.code ?? '');
+  }, [lang, haveCode]);
 
   useEffect(() => applyTheme(lang), [lang]);
 
