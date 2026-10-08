@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import io
+import os
+import tempfile
 import zipfile
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -18,8 +20,20 @@ from blockcode.ir import Program, Project
 from blockcode.project_io import ProjectError, ProjectStore
 from blockcode.registry import SPECS, STEP_ORDER
 
-WEB_DIST = Path(__file__).resolve().parent.parent / "web" / "dist"
+ROOT = Path(__file__).resolve().parent.parent
+# The built web app: web/dist locally, public/ when the Vercel build puts it there.
+WEB_DIRS = (ROOT / "web" / "dist", ROOT / "public")
 MAX_UPLOAD = 20 * 1024 * 1024
+
+
+def default_projects_dir() -> Path:
+    """Where projects live: $BLOCKCODE_PROJECTS_DIR, else /tmp on Vercel (the only writable
+    place there, and not kept between cold starts), else ./projects."""
+    if os.environ.get("BLOCKCODE_PROJECTS_DIR"):
+        return Path(os.environ["BLOCKCODE_PROJECTS_DIR"])
+    if os.environ.get("VERCEL"):
+        return Path(tempfile.gettempdir()) / "blockcode-projects"
+    return Path("projects")
 
 
 class ProgramIn(BaseModel):
@@ -41,7 +55,7 @@ class NewProject(BaseModel):
 
 def create_app(projects_dir: Path | None = None) -> FastAPI:
     app = FastAPI(title="BlockCode", version=__version__)
-    store = ProjectStore(Path(projects_dir or "projects").resolve())
+    store = ProjectStore(Path(projects_dir or default_projects_dir()).resolve())
     app.state.store = store
 
     def load(name: str) -> Project:
@@ -192,6 +206,12 @@ def create_app(projects_dir: Path | None = None) -> FastAPI:
         return Response(buf.getvalue(), media_type="application/zip",
                         headers={"Content-Disposition": f'attachment; filename="{fname}"'})
 
-    if WEB_DIST.is_dir():
-        app.mount("/", StaticFiles(directory=WEB_DIST, html=True), name="web")
+    web = next((d for d in WEB_DIRS if (d / "index.html").is_file()), None)
+    if web is not None:
+        app.mount("/", StaticFiles(directory=web, html=True), name="web")
     return app
+
+
+# Module-level app for ASGI hosts: Vercel (see [tool.vercel] in pyproject.toml) and
+# `uvicorn blockcode.server:app`. `blockcode serve` builds its own with create_app().
+app = create_app()

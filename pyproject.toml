@@ -33,5 +33,13 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["blockcode"]
 
+[tool.vercel]
+# Vercel looks for a FastAPI `app` in app.py / main.py / index.py by default; ours is here.
+entrypoint = "blockcode.server:app"
+
+[tool.vercel.scripts]
+# Build the web editor into public/, which Vercel serves from its CDN.
+build = "npm --prefix web ci && npm --prefix web run build -- --outDir ../public --emptyOutDir"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
