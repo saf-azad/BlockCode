@@ -80,6 +80,7 @@ export interface RunResult {
   stdout: string;
   plots: string[];
   error: RunError | null;
+  code: string; // the code that ran
 }
 
 export interface ParseResult {

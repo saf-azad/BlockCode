@@ -68,7 +68,7 @@ export type Action =
   | { type: 'focus'; id: string | null }
   | { type: 'tab'; tab: Tab }
   | { type: 'running' }
-  | { type: 'ran'; run: RunResult }
+  | { type: 'ran'; run: RunResult; auto?: boolean }
   | { type: 'edit'; text: string }
   | { type: 'parsed'; parse: ParseResult; text: string }
   | { type: 'tidy' }
@@ -79,6 +79,12 @@ export type Action =
   | { type: 'erd'; open: boolean }
   | { type: 'toast'; message: string | null }
   | { type: 'error'; message: string | null };
+
+/** True when the blocks have changed since the results on show were worked out. */
+export function runIsStale(s: Pick<State, 'lang' | 'program' | 'run' | 'generated'>): boolean {
+  const code = s.generated?.[effectiveLang(s)]?.code;
+  return !!s.run && (s.run.target !== effectiveLang(s) || (code !== undefined && code !== s.run.code));
+}
 
 /** The language actually shown: SQL is off while Python/R-only blocks are on the workspace. */
 export function effectiveLang(s: Pick<State, 'lang' | 'program'>): Lang {
@@ -127,11 +133,15 @@ export function reducer(s: State, a: Action): State {
       return { ...s, tab: a.tab };
     case 'running':
       return { ...s, running: true };
-    case 'ran':
-      return {
-        ...s, running: false, run: a.run,
-        tab: a.run.ok && a.run.plots.length && !a.run.tables.length && !a.run.stdout ? 'plot' : 'output',
-      };
+    case 'ran': {
+      // a run started by an edit updates the results in place; pressing Run shows them,
+      // staying on the Plot tab if that's where you pressed it
+      let tab = s.tab;
+      if (!a.auto && !(s.tab === 'plot' && a.run.plots.length)) {
+        tab = a.run.ok && a.run.plots.length && !a.run.tables.length && !a.run.stdout ? 'plot' : 'output';
+      }
+      return { ...s, running: false, run: a.run, tab };
+    }
     case 'edit': {
       const lang = effectiveLang(s);
       return { ...s, editing: { lang, text: a.text, parse: null } };

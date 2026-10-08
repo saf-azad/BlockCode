@@ -5,6 +5,11 @@ from __future__ import annotations
 from blockcode.codegen import generate
 from blockcode.diagnostics import Diagnostic, error, warning
 from blockcode.ir import Block, Program, TableInfo
+from blockcode.plan import Plan, build_plan
+
+NUMERIC = ("int", "float")
+# Bars past this many draw slowly and can't be read; a histogram or Group by is the fix.
+MAX_BARS = 100
 
 
 def validate(program: Program, tables: dict[str, TableInfo], target: str,
@@ -13,6 +18,7 @@ def validate(program: Program, tables: dict[str, TableInfo], target: str,
     diags = list(gen.diagnostics)
     if target != "sql":
         diags += check_variables(program)
+        diags += check_plots(program, tables)
     seen: set[tuple] = set()
     out = []
     for d in diags:
@@ -75,3 +81,74 @@ def check_variables(program: Program) -> list[Diagnostic]:
                                        b.id))
     walk(program.blocks, set())
     return diags
+
+
+def check_plots(program: Program, tables: dict[str, TableInfo]) -> list[Diagnostic]:
+    """Catch the plots that would crash or hang before they run: a column the rows don't have,
+    text where the chart needs numbers, and a bar for every one of thousands of rows."""
+    diags: list[Diagnostic] = []
+    plans: dict[str, Plan] = {}
+    for b in program.walk():  # source order, so a plot sees the stacks above it
+        if b.type == "from":
+            plans[b.field("name") or "out"] = build_plan(b, tables)
+        elif b.type == "plot":
+            plan = plans.get(b.field("data") or "out")
+            if plan is not None and plan.known:
+                diags += _check_plot(b, plan, tables)
+    return diags
+
+
+def _check_plot(b: Block, plan: Plan, tables: dict[str, TableInfo]) -> list[Diagnostic]:
+    chart, x, y = b.field("chart", "bar"), b.field("x"), b.field("y")
+    cols, data = plan.columns, plan.name
+    out: list[Diagnostic] = []
+    axes = [("x", x)] if chart == "hist" else [("x", x), ("y", y)]
+    for axis, name in axes:
+        if name and name not in cols:
+            out.append(error(f"{data} has no column called {name} any more. Pick another column "
+                             f"for the {axis} axis.", b.id))
+    if out:
+        return out
+
+    if not any(c.type in NUMERIC or c.type == "any" for c in cols.values()):
+        return [error(f"{data} has no number columns to plot. Group the rows and count them "
+                      f"(or add a new column), then plot that.", b.id)]
+
+    def needs_number(name: str, what: str) -> None:
+        c = cols.get(name)
+        if c is not None and c.type not in NUMERIC and c.type != "any":
+            kind = "true/false" if c.type == "bool" else "text"
+            out.append(error(f"{what} needs numbers, but {name} is {kind}. Pick a number column"
+                             f"{' or a bar chart' if what.startswith('A scatter') else ''}.",
+                             b.id))
+
+    if chart == "hist":
+        if x:
+            needs_number(x, "A histogram")
+    else:
+        if y:
+            needs_number(y, "The y axis")
+        if chart == "scatter" and x:
+            needs_number(x, "A scatter plot's x axis")
+    if chart == "bar" and not out:
+        rows = _row_estimate(plan, tables)
+        if rows is not None and rows > MAX_BARS:
+            out.append(error(f"This draws one bar for each of the {rows:,} rows in {data}, which "
+                             f"is too many to read. Group the rows first, keep fewer of them, or "
+                             f"switch to a histogram.", b.id))
+    return out
+
+
+def _row_estimate(plan: Plan, tables: dict[str, TableInfo]) -> int | None:
+    """Rows the stack will have, when that's certain without running it."""
+    if plan.wheres or plan.joins or plan.having:
+        return None
+    if plan.group is not None:
+        return 1 if not plan.group.field("by", []) else None
+    info = tables.get(plan.table)
+    if info is None:
+        return None
+    rows = info.rows
+    if plan.limit is not None and isinstance(plan.limit.field("n"), int):
+        rows = min(rows, plan.limit.field("n"))
+    return rows

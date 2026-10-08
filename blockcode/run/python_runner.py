@@ -15,7 +15,8 @@ from pathlib import Path
 
 from blockcode.codegen.emitter import Generated
 from blockcode.errors import friendly
-from blockcode.run import MAX_ROWS, RunError, RunResult, TableResult
+from blockcode.run import MAX_ROWS, RunError, RunResult, TableResult, clip_output
+from blockcode.run.py_worker import POOL
 
 TIMEOUT_S = 10.0
 
@@ -51,7 +52,10 @@ except BaseException as e:
             _line = fr.lineno
     _detail = str(e.args[0]) if isinstance(e, KeyError) and e.args else str(e)
     _err = {"kind": type(e).__name__, "detail": _detail, "line": _line}
-_show()
+if _err is None:
+    _show()
+else:
+    _plt.close("all")  # a plot that failed half way: don't show a blank figure
 
 def _table(name, df):
     import pandas as pd
@@ -84,28 +88,35 @@ def run_python(gen: Generated, project_dir: Path, names: list[str],
     with tempfile.TemporaryDirectory(prefix="blockcode-") as tmp:
         tmpd = Path(tmp)
         code_path, out_path, harness = tmpd / "program.py", tmpd / "result.json", tmpd / "h.py"
+        stdout_path = tmpd / "stdout.txt"
         code_path.write_text(gen.code, encoding="utf-8")
         harness.write_text(HARNESS, encoding="utf-8")
-        try:
-            proc = subprocess.run(
-                [sys.executable, "-X", "utf8", str(harness), str(code_path), str(out_path),
-                 json.dumps(names)],
-                cwd=project_dir, capture_output=True, text=True, timeout=timeout,
-                env=_env(),
-            )
-        except subprocess.TimeoutExpired as exc:
-            result.ok = False
-            out = exc.stdout.decode() if isinstance(exc.stdout, bytes) else (exc.stdout or "")
-            result.stdout = out
-            result.error = RunError(kind="Timeout", message=friendly("Timeout", "", "python"),
-                                    detail=f"Stopped after {timeout:g} seconds.")
-            return result
-        result.stdout = proc.stdout
-        if not out_path.exists():
-            result.ok = False
-            result.error = RunError(kind="Crash", message="Python stopped unexpectedly.",
-                                    detail=proc.stderr[-2000:])
-            return result
+        # the warm worker first (fast); a fresh Python if it isn't there or the run didn't finish
+        status = POOL.run_job({
+            "cwd": str(project_dir), "harness": str(harness), "code": str(code_path),
+            "out": str(out_path), "names": names, "stdout": str(stdout_path), "timeout": timeout,
+        }, _env())
+        if status == "timeout":
+            return _timed_out(result, _read(stdout_path), timeout)
+        if status == "done" and out_path.exists():
+            result.stdout = clip_output(_read(stdout_path))
+        else:
+            try:
+                proc = subprocess.run(
+                    [sys.executable, "-X", "utf8", str(harness), str(code_path), str(out_path),
+                     json.dumps(names)],
+                    cwd=project_dir, capture_output=True, text=True, timeout=timeout,
+                    env=_env(),
+                )
+            except subprocess.TimeoutExpired as exc:
+                out = exc.stdout.decode() if isinstance(exc.stdout, bytes) else (exc.stdout or "")
+                return _timed_out(result, out, timeout)
+            result.stdout = clip_output(proc.stdout)
+            if not out_path.exists():
+                result.ok = False
+                result.error = RunError(kind="Crash", message="Python stopped unexpectedly.",
+                                        detail=proc.stderr[-2000:])
+                return result
         data = json.loads(out_path.read_text(encoding="utf-8"))
     result.tables = [TableResult(**t) for t in data["tables"]]
     result.plots = data["plots"]
@@ -119,6 +130,18 @@ def run_python(gen: Generated, project_dir: Path, names: list[str],
                                 detail=f"{err['kind']}: {err['detail']}", line=line,
                                 block_id=blocks[-1] if blocks else None)
     return result
+
+
+def _timed_out(result: RunResult, stdout: str, timeout: float) -> RunResult:
+    result.ok = False
+    result.stdout = clip_output(stdout)
+    result.error = RunError(kind="Timeout", message=friendly("Timeout", "", "python"),
+                            detail=f"Stopped after {timeout:g} seconds.")
+    return result
+
+
+def _read(path: Path) -> str:
+    return path.read_text(encoding="utf-8", errors="replace") if path.exists() else ""
 
 
 def _env() -> dict:

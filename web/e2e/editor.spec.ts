@@ -136,6 +136,31 @@ test('plots detach in SQL and draw in Python; export all three', async ({ page }
   await expect(page.locator('.plotcard img')).toBeVisible();
 });
 
+test('after one run, results follow the blocks; plots show under the table', async ({ page }) => {
+  await open(page);
+  await page.getByRole('tab', { name: 'Python' }).click();
+  await page.getByRole('button', { name: 'Plot', exact: true }).click();
+  // Ctrl+Enter runs; the plot is drawn under the table without changing tabs
+  await page.keyboard.press('Control+Enter');
+  await expect(page.getByTestId('run-status')).toContainText('1 plot');
+  const inline = page.getByTestId('output-plot');
+  await expect(inline).toBeVisible();
+  const before = await inline.getAttribute('src');
+
+  // change the chart from the Plot tab: it redraws by itself and you stay on the tab
+  await page.getByRole('tab', { name: 'Plot' }).click();
+  await page.locator('.plotcard').getByRole('button', { name: 'Line' }).click();
+  await expect.poll(() => page.getByTestId('plot-image').getAttribute('src')).not.toBe(before);
+  await expect(page.getByRole('tab', { name: 'Plot' })).toHaveAttribute('aria-selected', 'true');
+
+  // a histogram only offers number columns, and moves off a text one by itself
+  await page.locator('[data-type="plot"] select[aria-label="Chart type"]').selectOption('hist');
+  const xs = page.locator('[data-type="plot"] select[aria-label="x axis"]');
+  await expect(xs).toHaveValue('avg_grade');
+  expect(await xs.locator('option').allInnerTexts()).toEqual(['avg_grade', 'n']);
+  await expect(page.getByTestId('run-error')).toHaveCount(0);
+});
+
 test('hovering a block shows it in all three languages and its animation', async ({ page }) => {
   await open(page);
   await page.locator('[data-type="join"]').hover({ position: { x: 40, y: 20 } });

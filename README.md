@@ -25,7 +25,13 @@ uv run pytest                # engine, API and CLI tests
 ```
 
 R is optional: R code is always generated and exported, and runs when `Rscript` (with dplyr,
-readr, stringr and ggplot2) is installed.
+readr, stringr and ggplot2) is installed. Plots are saved with `ragg` when it is installed, else
+R's own `png()` device; if R reports it can't save plots, `install.packages("ragg")` fixes it.
+
+In the editor, Ctrl+Enter (⌘+Enter) runs the program. After the first run, the results follow
+the blocks: each edit re-runs the program once its code has no problems. On Linux, Python runs
+in a warm worker that has pandas and matplotlib already loaded, so a run takes a fraction of a
+second; elsewhere each run starts a fresh Python.
 
 ## Deploying to Vercel
 

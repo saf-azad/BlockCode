@@ -9,6 +9,7 @@ import { blockColour } from '../theme';
 import type { Block, Diagnostic, Lang, Program, TableInfo } from '../types';
 import { Slot } from './Expr';
 import { ColumnChips, ColumnPick, NumIn, Pick, ScopeProvider, TextIn, useScope, useWords, type Scope } from './fields';
+import { plotFields } from './make';
 
 // ---- shared wrappers -------------------------------------------------------------------------
 
@@ -480,19 +481,27 @@ function PlotBlock({ b }: { b: Block }) {
   const lang = effectiveLang(state);
   const cols = resultColumns(state.program, b.fields.data ?? 'out', tables);
   const f = (k: string, v: any) => edit((p) => setField(p, b.id, k, v));
+  // changing the chart or the rows moves any axis that no longer fits onto one that does
+  const refit = (changes: Record<string, any>) => edit((p) => {
+    const fields = { ...b.fields, ...changes };
+    const fixed = { ...changes, ...plotFields(fields, resultColumns(p, fields.data ?? 'out', tables)) };
+    return Object.entries(fixed).reduce((acc, [k, v]) => setField(acc, b.id, k, v), p);
+  });
+  const nums = cols.filter((c) => c.type === 'int' || c.type === 'float');
+  const numCols = nums.length ? nums : cols;
   const detached = lang === 'sql';
   return (
     <Shell b={b} family="statement" className={`blk first last${detached ? ' detached' : ''}`} label="plot"
       style={{ background: lang === 'r' ? '#E3F4E6' : '#ECE6FB' }}>
       <span className="kw">{lang === 'r' ? 'ggplot' : 'Plot'}</span>
-      <Pick value={b.fields.chart} options={CHARTS} onChange={(v) => f('chart', v)} title="Chart type" />
-      {scope.stacks.length > 1 && <><span className="word">of</span><Pick value={b.fields.data} options={scope.stacks} onChange={(v) => f('data', v)} title="Rows to plot" /></>}
+      <Pick value={b.fields.chart} options={CHARTS} onChange={(v) => refit({ chart: v })} title="Chart type" />
+      {scope.stacks.length > 1 && <><span className="word">of</span><Pick value={b.fields.data} options={scope.stacks} onChange={(v) => refit({ data: v })} title="Rows to plot" /></>}
       <span className="word">x</span>
-      <ColumnPick value={b.fields.x} columns={cols} onChange={(v) => f('x', v)} title="x axis" />
+      <ColumnPick value={b.fields.x} columns={b.fields.chart === 'hist' || b.fields.chart === 'scatter' ? numCols : cols} onChange={(v) => f('x', v)} title="x axis" />
       {b.fields.chart === 'hist' ? (
         <><span className="word">bins</span><NumIn value={b.fields.bins ?? 5} onChange={(v) => f('bins', Math.max(1, v))} title="Bins" /></>
       ) : (
-        <><span className="word">y</span><ColumnPick value={b.fields.y} columns={cols} onChange={(v) => f('y', v)} title="y axis" /></>
+        <><span className="word">y</span><ColumnPick value={b.fields.y} columns={numCols} onChange={(v) => f('y', v)} title="y axis" /></>
       )}
       {detached && <span className="tag-chip">Detached</span>}
     </Shell>
