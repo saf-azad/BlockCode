@@ -1,0 +1,14 @@
+{
+  "_doc": "What each hover animation shows, as data. The animations in scenes.ts are built from these numbers, and tests/test_explainers.py runs the same stories through the engine to check the animations tell the truth.",
+  "where": { "rows": 9, "kept": [0, 2, 4, 7] },
+  "join_inner": { "left": ["A", "B", "C"], "right": ["A", "C", "D"], "rows": 2 },
+  "join_left": { "left": ["A", "B", "C"], "right": ["A", "C", "D"], "rows": 3, "empty_partners": 1 },
+  "group": { "keys": ["A", "B", "C", "B", "A", "C", "C", "A", "B"], "groups": 3 },
+  "having": { "piles": [3, 1, 2], "at_least": 2, "groups_kept": 2 },
+  "order": { "heights": [2, 4, 1, 3], "descending": true },
+  "limit": { "rows": 7, "n": 5 },
+  "select": { "rows": 2, "columns": 3, "keep": [0, 2] },
+  "derive": { "rows": 3 },
+  "repeat": { "times": 3 },
+  "while": { "start": 1, "until": 4 }
+}

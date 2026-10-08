@@ -1,0 +1,25 @@
+course_id,title,dept
+MAT101,Algebra,Mathematics
+MAT102,Calculus,Mathematics
+MAT103,Statistics,Mathematics
+MAT104,Geometry,Mathematics
+PHY101,Mechanics,Physics
+PHY102,Waves,Physics
+PHY103,Electricity,Physics
+PHY104,Astronomy,Physics
+ENG101,Poetry,English
+ENG102,Drama,English
+ENG103,Novels,English
+ENG104,Writing,English
+HIS101,Ancient World,History
+HIS102,Medieval Europe,History
+HIS103,Modern History,History
+HIS104,World Wars,History
+BIO101,Cells,Biology
+BIO102,Ecology,Biology
+BIO103,Genetics,Biology
+BIO104,Human Body,Biology
+CHE101,Atoms,Chemistry
+CHE102,Reactions,Chemistry
+CHE103,Organic,Chemistry
+CHE104,Lab Skills,Chemistry

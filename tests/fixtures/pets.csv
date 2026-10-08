@@ -1,0 +1,9 @@
+pet_id,name,species,age,weight,owner
+1,Rex,dog,3,12.5,Ann
+2,Tom,cat,,4.1,Bob
+3,Bubbles,fish,1,,Ann
+4,Spot,dog,7,20.0,
+5,Kitty,cat,2,3.8,Cara
+6,,dog,5,15.2,Bob
+7,Nemo,fish,,0.2,Cara
+8,Max,dog,10,25.0,Ann
