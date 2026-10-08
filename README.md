@@ -26,3 +26,11 @@ uv run pytest                # engine, API and CLI tests
 
 R is optional: R code is always generated and exported, and runs when `Rscript` (with dplyr,
 readr, stringr and ggplot2) is installed.
+
+## Deploying to Vercel
+
+`pyproject.toml` points Vercel at the FastAPI app (`[tool.vercel] entrypoint =
+"blockcode.server:app"`). The build script compiles the web editor into `public/`, which Vercel
+serves from its CDN. On Vercel, projects live in `/tmp`, so uploads and saved programs last only as
+long as a function instance; set `BLOCKCODE_PROJECTS_DIR` to change where they go. R runs only
+where `Rscript` is installed, so on Vercel the R tab can show and export code but can't run it.

@@ -126,5 +126,7 @@ def _env() -> dict:
 
     env = {k: v for k, v in os.environ.items() if k not in ("PYTHONSTARTUP",)}
     env["MPLBACKEND"] = "Agg"
+    # matplotlib caches fonts in its config dir; make sure it is writable (read-only $HOME on Vercel)
+    env.setdefault("MPLCONFIGDIR", os.path.join(tempfile.gettempdir(), "blockcode-mpl"))
     env["PYTHONIOENCODING"] = "utf-8"
     return env
