@@ -136,6 +136,31 @@ test('plots detach in SQL and draw in Python; export all three', async ({ page }
   await expect(page.locator('.plotcard img')).toBeVisible();
 });
 
+test('after one run, results follow the blocks; plots show under the table', async ({ page }) => {
+  await open(page);
+  await page.getByRole('tab', { name: 'Python' }).click();
+  await page.getByRole('button', { name: 'Plot', exact: true }).click();
+  // Ctrl+Enter runs; the plot is drawn under the table without changing tabs
+  await page.keyboard.press('Control+Enter');
+  await expect(page.getByTestId('run-status')).toContainText('1 plot');
+  const inline = page.getByTestId('output-plot');
+  await expect(inline).toBeVisible();
+  const before = await inline.getAttribute('src');
+
+  // change the chart from the Plot tab: it redraws by itself and you stay on the tab
+  await page.getByRole('tab', { name: 'Plot' }).click();
+  await page.locator('.plotcard').getByRole('button', { name: 'Line' }).click();
+  await expect.poll(() => page.getByTestId('plot-image').getAttribute('src')).not.toBe(before);
+  await expect(page.getByRole('tab', { name: 'Plot' })).toHaveAttribute('aria-selected', 'true');
+
+  // a histogram only offers number columns, and moves off a text one by itself
+  await page.locator('[data-type="plot"] select[aria-label="Chart type"]').selectOption('hist');
+  const xs = page.locator('[data-type="plot"] select[aria-label="x axis"]');
+  await expect(xs).toHaveValue('avg_grade');
+  expect(await xs.locator('option').allInnerTexts()).toEqual(['avg_grade', 'n']);
+  await expect(page.getByTestId('run-error')).toHaveCount(0);
+});
+
 test('hovering a block shows it in all three languages and its animation', async ({ page }) => {
   await open(page);
   await page.locator('[data-type="join"]').hover({ position: { x: 40, y: 20 } });
@@ -179,4 +204,26 @@ test('drag and drop: palette to stack, table to workspace, block into a loop', a
   await page.locator('.workspace').click({ position: { x: 700, y: 600 } });
   await drag(page, page.getByRole('button', { name: 'Print', exact: true }), page.locator('[data-type="foreach"] .drop-end'), 0);
   await expect(page.locator('[data-type="foreach"] [data-type="print"]')).toBeVisible();
+});
+
+test('Python and R run in the browser, plots and all', async ({ page, request }) => {
+  const cfg = await (await request.get('/api/runtime')).json();
+  test.skip(cfg.run_in !== 'browser', 'Python and R run on the server here');
+  const calls: string[] = [];
+  page.on('request', (r) => { const m = r.url().match(/\/api\/projects\/[^/]+\/(run|job|finish)$/); if (m) calls.push(m[1]); });
+  await open(page);
+  for (const lang of ['Python', 'R']) {
+    calls.length = 0;
+    await page.getByRole('tab', { name: 'Code' }).click();
+    await page.getByRole('tab', { name: lang, exact: true }).click();
+    await page.getByRole('button', { name: lang === 'R' ? 'ggplot' : 'Plot', exact: true }).click();
+    await page.getByTestId('run').click();
+    await expect(page.getByTestId('run-status')).toContainText(`Ran as ${lang} · 5 rows · 1 plot`, { timeout: 200_000 });
+    await expect(page.getByTestId('output-plot')).toBeVisible();
+    // ran here, not on the server (switching language re-runs too, so there may be more)
+    expect(calls).toContain('finish');
+    expect(calls).not.toContain('run');
+    await expect(page.getByTestId('result').first()).toContainText('Mathematics');
+    await page.locator('[data-type="plot"] button[aria-label="Remove block"]').click();
+  }
 });

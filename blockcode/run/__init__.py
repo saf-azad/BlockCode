@@ -5,6 +5,13 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 MAX_ROWS = 200
+MAX_STDOUT = 100_000  # characters of printing to send back (a runaway loop can print megabytes)
+
+
+def clip_output(out: str) -> str:
+    if len(out) <= MAX_STDOUT:
+        return out
+    return out[:MAX_STDOUT] + f"\n… and {len(out) - MAX_STDOUT:,} more characters of printing.\n"
 
 
 class TableResult(BaseModel):
@@ -29,3 +36,4 @@ class RunResult(BaseModel):
     stdout: str = ""
     plots: list[str] = Field(default_factory=list)  # base64 PNGs
     error: RunError | None = None
+    code: str = ""  # the code that ran, so the editor can tell when its results are out of date

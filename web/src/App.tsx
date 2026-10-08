@@ -1,6 +1,8 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { api } from './api';
 import { Panel } from './panels/Panel';
+import { startRun } from './panels/run';
+import { warm } from './runtime';
 import { ErdPanel } from './sidebar/Erd';
 import { Sidebar } from './sidebar/Sidebar';
 import { DndProvider } from './stack/dnd';
@@ -49,6 +51,27 @@ function useEngine() {
     return () => clearTimeout(t);
   }, [state.saved, state.program, state.project, state.projectName, dispatch]);
 
+  // once you've run the program, keep its results in step with the blocks: re-run whenever
+  // the code changes and has no problems (one run at a time, the newest wins)
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const gen = state.generated?.[lang];
+  useEffect(() => {
+    const s = stateRef.current;
+    if (!s.run || s.running || !gen) return;
+    if (s.run.target === lang && s.run.code === gen.code) return;
+    if (!gen.ok || gen.diagnostics.some((d) => d.severity === 'error')) return;
+    const t = setTimeout(() => startRun(stateRef.current, dispatch, true), 350);
+    return () => clearTimeout(t);
+  }, [gen, lang, state.running, dispatch]);
+
+  // Python and R run in the browser: start downloading them as soon as their tab is picked
+  const code = state.generated?.[lang]?.code;
+  const haveCode = code !== undefined;
+  useEffect(() => {
+    if (lang !== 'sql' && haveCode) warm(lang, stateRef.current.generated?.[lang]?.code ?? '');
+  }, [lang, haveCode]);
+
   useEffect(() => applyTheme(lang), [lang]);
 
   useEffect(() => {
@@ -60,6 +83,12 @@ function useEngine() {
   // undo / redo outside text fields
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        e.stopPropagation();
+        startRun(stateRef.current, dispatch);
+        return;
+      }
       const el = e.target as HTMLElement;
       if (el.closest('input, textarea, select, .cm-editor')) return;
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
@@ -68,8 +97,8 @@ function useEngine() {
       }
       if (e.key === 'Escape') dispatch({ type: 'focus', id: null });
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
   }, [dispatch]);
 }
 

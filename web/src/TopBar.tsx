@@ -68,7 +68,7 @@ export function TopBar() {
             </div>
           )}
         </div>
-        <button className="btn primary" onClick={run} disabled={state.running} data-testid="run">
+        <button className="btn primary" onClick={run} data-testid="run" title="Run (Ctrl+Enter)">
           <svg width="11" height="11" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 1l7 4-7 4z" fill="currentColor" /></svg>
           {state.running ? 'Running…' : `Run ${LANG_LABEL[lang]}`}
         </button>

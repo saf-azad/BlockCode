@@ -31,6 +31,12 @@ def friendly(kind: str, message: str, target: str) -> str:
             return f"There is no column or field called {m.group(1)} on that row."
     if kind == "TypeError" and ("unsupported operand" in message or "can only concatenate" in message):
         return "These values can't be combined: check you aren't mixing text and numbers."
+    if kind == "IndexError" and "with size 0" in message:
+        return "There are no rows here: the steps above don't keep any. Loosen a filter."
+    if kind == "TypeError" and "no numeric data to plot" in message:
+        return "This chart needs numbers, but the column has text or is empty."
+    if "requires a continuous x aesthetic" in message:
+        return "A histogram needs numbers, but this column is text. Pick a number column."
     if kind == "Timeout":
         return "Your program took too long. Is there a loop that never stops?"
     if kind == "SyntaxError":

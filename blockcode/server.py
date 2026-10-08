@@ -10,12 +10,13 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from blockcode import __version__
 from blockcode.codegen import TARGETS, generate
+from blockcode.engine import BROWSER_TARGETS, Raw
 from blockcode.ir import Program, Project
 from blockcode.project_io import ProjectError, ProjectStore
 from blockcode.registry import SPECS, STEP_ORDER
@@ -45,6 +46,29 @@ class ParseIn(BaseModel):
     code: str
     lang: str
     previous: Program | None = None
+
+
+class FinishIn(BaseModel):
+    program: Program
+    target: str
+    raw: Raw
+
+
+# Python and R run in the learner's browser, from these WebAssembly builds. Point them at your
+# own copies to self-host, or set BLOCKCODE_RUN_IN=server to run on this machine instead.
+PYODIDE_URL = "https://cdn.jsdelivr.net/pyodide/v314.0.7/full/pyodide.mjs"
+WEBR_URL = "https://webr.r-wasm.org/v0.6.0/webr.mjs"
+WEBR_REPO = "https://repo.r-wasm.org/"
+
+
+def runtime_config() -> dict:
+    env = os.environ.get
+    return {
+        "run_in": "server" if env("BLOCKCODE_RUN_IN", "browser") == "server" else "browser",
+        "pyodide": env("BLOCKCODE_PYODIDE_URL", PYODIDE_URL),
+        "webr": env("BLOCKCODE_WEBR_URL", WEBR_URL),
+        "webr_repo": env("BLOCKCODE_WEBR_REPO", WEBR_REPO),
+    }
 
 
 class NewProject(BaseModel):
@@ -171,6 +195,43 @@ def create_app(projects_dir: Path | None = None) -> FastAPI:
 
         project = load(name)
         return run_program(store, project, body.program, target_ok(body.target)).model_dump()
+
+    @app.get("/api/runtime")
+    def runtime() -> dict:
+        return runtime_config()
+
+    @app.post("/api/projects/{name}/job")
+    def job(name: str, body: ProgramIn) -> dict:
+        """What the browser needs to run Python or R itself, or the result if it can't run."""
+        from blockcode.engine import browser_job
+
+        project = load(name)
+        target = target_ok(body.target)
+        if target not in BROWSER_TARGETS:
+            raise HTTPException(400, "Only Python and R run in the browser.")
+        todo, stopped = browser_job(store, project, body.program, target)
+        return {"job": todo.model_dump()} if todo else {"result": stopped.model_dump()}
+
+    @app.post("/api/projects/{name}/finish")
+    def finish(name: str, body: FinishIn) -> dict:
+        """Turn what a run in the browser produced into a result (friendly errors, blocks)."""
+        from blockcode.engine import finish as finish_run
+
+        project = load(name)
+        target = target_ok(body.target)
+        if target not in BROWSER_TARGETS:
+            raise HTTPException(400, "Only Python and R run in the browser.")
+        return finish_run(project, body.program, target, body.raw).model_dump()
+
+    @app.get("/api/projects/{name}/files/{path:path}")
+    def data_file(name: str, path: str) -> FileResponse:
+        """A project's data file (only the tables' CSVs), for runs in the browser."""
+        project = load(name)
+        table = next((t for t in project.tables if t.file == path), None)
+        f = store.dir(project.name) / path if table else None
+        if f is None or not f.is_file():
+            raise HTTPException(404, "No such data file.")
+        return FileResponse(f, media_type="text/csv")
 
     @app.post("/api/projects/{name}/parse")
     def parse(name: str, body: ParseIn) -> dict:

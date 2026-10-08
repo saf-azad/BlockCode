@@ -2,10 +2,13 @@ import { defineConfig } from '@playwright/test';
 
 // End-to-end tests drive the real app: the FastAPI engine serves the built web app.
 // Run `npm run build` first, then `npm run e2e`.
+// Python and R run in the browser, downloading Pyodide and webR (and pandas, ggplot2, ...) on
+// their first run: allow for that. BLOCKCODE_RUN_IN=server runs them on the server instead
+// (where those downloads are blocked).
 export default defineConfig({
   testDir: './e2e',
-  timeout: 60_000,
-  expect: { timeout: 15_000 },
+  timeout: 240_000,
+  expect: { timeout: 90_000 },
   fullyParallel: false,
   workers: 1,
   use: {

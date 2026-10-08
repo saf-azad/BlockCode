@@ -1,5 +1,6 @@
 // New blocks from the palette, pre-filled from what is on the workspace (columns, stacks, loops).
 import { columnsAt, freshStackName, mk, ownerStack, stackNames, resultColumns, variables, walk } from '../ir';
+import type { Col } from '../ir';
 import type { Block, Program, TableInfo } from '../types';
 
 const numeric = (t: string) => t === 'int' || t === 'float';
@@ -76,9 +77,7 @@ export function makeBlock(type: string, program: Program, tables: TableInfo[], o
       return mk('while', {}, {}, { body: [] });
     case 'plot': {
       const rc = resultColumns(program, lastStack, tables);
-      const x = rc.find((c) => c.type === 'text')?.name ?? rc[0]?.name ?? '';
-      const y = rc.find((c) => numeric(c.type))?.name ?? rc[1]?.name ?? '';
-      return mk('plot', { chart: 'bar', data: lastStack, x, y, bins: 5 });
+      return mk('plot', { data: lastStack, bins: 5, ...plotFields({ chart: defaultChart(program, lastStack, rc) }, rc) });
     }
     case 'raw':
       return mk('raw', { lang: 'python', code: '# your code here' });
@@ -104,4 +103,37 @@ export function targetStack(program: Program, focus: string | null): Block | nul
   let last: Block | null = null;
   for (const b of walk(program.blocks)) if (b.type === 'from') last = b;
   return last;
+}
+
+/** A chart that suits the rows: bars for a few labelled rows (after Group by or Limit), else a
+ * scatter of two number columns, else a histogram. A bar for every row of a big table can't
+ * be read and takes ages to draw. */
+function defaultChart(program: Program, stack: string, cols: Col[]): string {
+  let from: Block | null = null;
+  for (const b of walk(program.blocks)) if (b.type === 'from' && (b.fields.name || 'out') === stack) from = b;
+  const steps = from?.stacks.steps ?? [];
+  const few = steps.some((s) => (s.type === 'group' && (s.fields.by ?? []).length) || (s.type === 'limit' && s.fields.n <= 100));
+  const nums = cols.filter((c) => numeric(c.type)).length;
+  if (few || !nums) return 'bar';
+  return nums >= 2 ? 'scatter' : 'hist';
+}
+
+/** Plot settings with every axis on a column that exists and suits the chart: number columns
+ * where the chart needs numbers. Keeps the current choice whenever it still works. */
+export function plotFields(fields: Record<string, any>, cols: Col[]): { chart: string; x: string; y: string } {
+  const chart = fields.chart ?? 'bar';
+  const nums = cols.filter((c) => numeric(c.type)).map((c) => c.name);
+  const all = cols.map((c) => c.name);
+  const text = cols.filter((c) => !numeric(c.type)).map((c) => c.name);
+  const pick = (cur: string | undefined, ok: string[], ...prefer: (string | undefined)[]) =>
+    (cur && ok.includes(cur) ? cur : prefer.find((p) => p && ok.includes(p))) ?? ok[0] ?? cur ?? '';
+  if (!cols.length) return { chart, x: fields.x ?? '', y: fields.y ?? '' };
+  if (chart === 'hist') return { chart, x: pick(fields.x, nums.length ? nums : all, fields.y), y: fields.y ?? '' };
+  if (chart === 'scatter') {
+    const ok = nums.length ? nums : all;
+    const x = pick(fields.x, ok, ...ok.filter((c) => c !== fields.y));
+    return { chart, x, y: pick(fields.y, ok, ...ok.filter((c) => c !== x)) };
+  }
+  const x = pick(fields.x, all, text[0]);
+  return { chart, x, y: pick(fields.y, nums.length ? nums : all, ...nums.filter((c) => c !== x)) };
 }
