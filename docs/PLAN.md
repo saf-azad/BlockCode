@@ -104,6 +104,14 @@ examples/  tests/
 
 ## Status
 
+**MVP for a public launch (blank start).** The editor now opens empty: no sample tables, no
+preloaded program, no Examples menu. Each visitor's tables and blocks are kept in their own
+browser and the server is stateless (`/api/tables`, `/api/generate-all`, `/api/parse`, `/api/erd`,
+`/api/run`, `/api/export`), so it runs the same on one machine, in Docker, or on Vercel. Uploaded
+CSVs are tidied so SQL, pandas and R agree (`blockcode/data_io.py`, tested in
+`tests/test_awkward_csvs.py`), and learners' code runs with a clean environment and limits
+(`blockcode/run/sandbox.py`).
+
 All milestones M0–M10 are built and tested. Each one was pushed as its own commit on
 `claude/dazzling-fermi-k9njli`.
 

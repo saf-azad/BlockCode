@@ -174,3 +174,23 @@ def test_export_zips_code_and_data():
         assert r.headers["content-disposition"].endswith(f'my_analysis-{target}.zip"')
         names = set(zipfile.ZipFile(io.BytesIO(r.content)).namelist())
         assert names == expect
+
+
+def test_unusual_sql_explains_instead_of_crashing():
+    c = client()
+    tables = school_tables(c)
+    for code in ["SELECT * FROM students ORDER BY 1", "SELECT * FROM students LIMIT -1",
+                 "SELEC * FRM students", "", "DROP TABLE students"]:
+        r = c.post("/api/parse", json={"code": code, "lang": "sql", "tables": tables})
+        assert r.status_code == 200, code
+        assert r.json()["ok"] is False or r.json()["program"] is not None
+
+
+def test_a_broken_program_degrades_instead_of_crashing():
+    c = client()
+    weird = {"blocks": [{"id": "x", "type": "from", "fields": {"table": ["students"], "name": 3},
+                         "inputs": {}, "stacks": {"steps": [{"id": "y", "type": "limit",
+                                                             "fields": {"n": "lots"}}]}}]}
+    r = c.post("/api/generate-all", json={"program": weird, "tables": school_tables(c)})
+    assert r.status_code == 200
+    assert set(r.json()) == {"sql", "python", "r"}

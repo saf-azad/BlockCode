@@ -210,6 +210,9 @@ export function CodePanel() {
           })}
         </div>
       </div>
+      {lang === 'r' && !state.rReady && !editing && (
+        <div className="notice">R can't run on this server. Read it here, or press <b>Export .qmd</b> to run it in RStudio.</div>
+      )}
       {sqlOff && <div className="notice">SQL is off: some blocks (marked with a dashed outline) have no SQL equivalent. The data blocks still compile to pandas and dplyr.</div>}
       {editing && (
         <div className={`notice edit${bad ? ' bad' : ''}`} role="status">

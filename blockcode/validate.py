@@ -37,7 +37,9 @@ def check_names(program: Program) -> list[Diagnostic]:
         name = {"from": b.field("name") or "out", "setvar": b.field("name"),
                 "changevar": b.field("name"), "foreach": b.field("var"),
                 "repeat": b.field("var")}.get(b.type)
-        if name and (not name.isidentifier() or keyword.iskeyword(name) or name in PY_TAKEN):
+        if not isinstance(name, str) or not name:
+            continue
+        if not name.isidentifier() or keyword.iskeyword(name) or name in PY_TAKEN:
             diags.append(error(f'"{name}" can\'t be a name in Python. Pick another one that '
                                f"starts with a letter and isn't a Python word like for or "
                                f"class.", b.id))

@@ -76,7 +76,7 @@ export function Workspace() {
         </ScopeProvider>
         {(state.dropping || state.dropped) && <DropOverlay />}
       </div>
-      <TriBar />
+      {blocks.length > 0 && <TriBar />}
     </div>
   );
 }

@@ -33,8 +33,10 @@ export function useProblems(): Problem[] {
     return [name, line ? `L${line}` : ''].filter(Boolean).join(' · ');
   };
   const run = state.run;
+  const said = new Set<string>(); // the run's own error, so a check saying the same isn't listed twice
   if (run?.error && run.target === lang) {
     out.push({ kind: 'error', label: 'Error', message: run.error.message, blockId: run.error.block_id, where: where(run.error.block_id, run.error.line) });
+    said.add(`${run.error.message}|${run.error.block_id}`);
   }
   if (state.editing?.parse && !state.editing.parse.ok) {
     for (const d of state.editing.parse.diagnostics) out.push({ kind: 'error', label: 'Error', message: d.message, blockId: null, where: d.line ? `L${d.line}` : '' });
@@ -43,7 +45,7 @@ export function useProblems(): Problem[] {
   // the SQL problems explain why SQL is off, even while another language is shown
   const sqlDiags = (state.generated?.sql?.diagnostics ?? []).filter((d) => d.severity === 'sql');
   for (const d of [...(state.generated?.[lang]?.diagnostics ?? []), ...(lang === 'sql' ? [] : sqlDiags)]) {
-    if (d.severity === 'info') continue;
+    if (d.severity === 'info' || said.has(`${d.message}|${d.block_id}`)) continue;
     const key = `${d.severity}|${d.message}|${d.block_id}`;
     if (seen.has(key)) continue;
     seen.add(key);

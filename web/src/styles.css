@@ -484,3 +484,12 @@ textarea.paste {
 }
 .cm-wrap .cm-placeholder { color: var(--faint); font-family: var(--body); font-size: 14px; line-height: 1.6; white-space: pre-wrap; }
 .palette .pal-block:disabled { box-shadow: none; }
+
+@media (max-height: 820px) {
+  .welcome { gap: 14px; padding: 24px 28px; }
+  .welcome h1 { font-size: 30px; }
+  .welcome .lede { font-size: 15px; }
+  .steps { gap: 8px; padding-top: 14px; }
+  .steps li { font-size: 13.5px; }
+  .workspace { padding-top: 24px; }
+}

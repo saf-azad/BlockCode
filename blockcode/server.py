@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import io
 import json
+import logging
 import re
 import sqlite3
 import zipfile
@@ -20,8 +21,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Iterator
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import Response
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
 from starlette.concurrency import run_in_threadpool
@@ -38,6 +39,9 @@ WEB_DIRS = (ROOT / "web" / "dist", ROOT / "public")
 MAX_FILE = 10 * 1024 * 1024  # one CSV, after unzipping
 MAX_TABLES = 30
 TOO_BIG = f"That file is too big ({MAX_FILE // (1024 * 1024)} MB max)."
+OOPS = ("Something went wrong inside BlockCode with these blocks. Undo your last change, or "
+        "remove the block you just edited, and try again.")
+log = logging.getLogger("blockcode")
 
 
 class GenerateIn(BaseModel):
@@ -71,9 +75,9 @@ def target_ok(target: str) -> str:
 
 def unzip(content: bytes) -> bytes:
     """The browser gzips CSVs before sending them; plain files are accepted too."""
+    if len(content) > MAX_FILE:
+        raise HTTPException(413, TOO_BIG)
     if not content.startswith(b"\x1f\x8b"):
-        if len(content) > MAX_FILE:
-            raise HTTPException(413, TOO_BIG)
         return content
     d = zlib.decompressobj(16 + zlib.MAX_WBITS)
     try:
@@ -128,6 +132,11 @@ def create_app() -> FastAPI:
     protect_server_process()
     app = FastAPI(title="BlockCode", version=__version__)
 
+    @app.exception_handler(Exception)
+    async def unexpected(request: Request, exc: Exception) -> JSONResponse:
+        log.exception("unexpected error on %s", request.url.path)
+        return JSONResponse({"detail": OOPS}, status_code=500)
+
     @app.get("/api/health")
     def health() -> dict:
         from blockcode.run.r_runner import rscript
@@ -163,12 +172,19 @@ def create_app() -> FastAPI:
         hovered block in all three)."""
         from blockcode.validate import validate
 
+        from blockcode.codegen.emitter import Generated
+        from blockcode.diagnostics import error
+
         tables = {t.name: t for t in body.tables}
         out = {}
         for t in TARGETS:
             extra = {"title": body.title or "BlockCode"} if t == "r" else {}
-            g = generate(body.program, tables, t, **extra)
-            g.diagnostics = validate(body.program, tables, t, generated=g)
+            try:
+                g = generate(body.program, tables, t, **extra)
+                g.diagnostics = validate(body.program, tables, t, generated=g)
+            except Exception:  # one language failing shouldn't take the others down
+                log.exception("generate %s failed", t)
+                g = Generated(target=t, code="", lines=[], diagnostics=[error(OOPS)], ok=False)
             out[t] = g.model_dump()
         return out
 

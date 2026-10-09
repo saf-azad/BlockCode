@@ -37,7 +37,9 @@ export function Output() {
       <div className="status" data-testid="run-status">
         {run.ok ? `Ran as ${LANG_LABEL[run.target]}${rows ? ` · ${rows}` : ''}${run.plots.length ? ` · ${run.plots.length} plot${run.plots.length > 1 ? 's' : ''}` : ''}`
           : `${LANG_LABEL[run.target]} stopped with a problem`}
-        {run.target !== lang && ' · the language has changed since, press Run again'}
+        {run.target !== lang && (lang === 'r' && !state.rReady
+          ? ` · R can't run on this server, so this is the ${LANG_LABEL[run.target]} result`
+          : ' · the language has changed since, press Run again')}
       </div>
       {run.error && (
         <div className="errcard" role="button" tabIndex={0} data-testid="run-error"
