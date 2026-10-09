@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from blockcode.codegen import generate
 from blockcode.codegen.emitter import Generated
-from blockcode.ir import Program, Project
+from blockcode.ir import Program, Project, TableInfo
 from blockcode.project_io import ProjectStore
 from blockcode.run import RunError, RunResult
-
-
-def table_map(project: Project) -> dict:
-    return {t.name: t for t in project.tables}
 
 
 def result_names(program: Program) -> list[str]:
@@ -24,7 +22,14 @@ def result_names(program: Program) -> list[str]:
 
 
 def run(store: ProjectStore, project: Project, program: Program, target: str) -> RunResult:
-    gen: Generated = generate(program, table_map(project), target)
+    return run_in(store.dir(project.name), store.ensure_db(project.name), project.tables,
+                  program, target)
+
+
+def run_in(workdir: Path, db: Path, tables: list[TableInfo], program: Program,
+           target: str) -> RunResult:
+    """Run ``program`` from ``workdir`` (which holds ``data/*.csv``) against the SQLite ``db``."""
+    gen: Generated = generate(program, {t.name: t for t in tables}, target)
     blocking = [d for d in gen.diagnostics if d.severity == "error"]
     if target == "sql" and not gen.ok:
         first = next((d for d in gen.diagnostics if d.severity == "sql"), None)
@@ -39,11 +44,11 @@ def run(store: ProjectStore, project: Project, program: Program, target: str) ->
     names = result_names(program)
     if target == "sql":
         from blockcode.run.sql_runner import run_sql
-        return run_sql(gen, store.ensure_db(project.name), names)
+        return run_sql(gen, db, names)
     if target == "python":
         from blockcode.run.python_runner import run_python
-        return run_python(gen, store.dir(project.name), names)
+        return run_python(gen, workdir, names)
     if target == "r":
         from blockcode.run.r_runner import run_r
-        return run_r(gen, store.dir(project.name), names)
+        return run_r(gen, workdir, names)
     raise ValueError(f"Unknown target {target!r}")

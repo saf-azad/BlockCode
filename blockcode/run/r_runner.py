@@ -6,13 +6,14 @@ import base64
 import csv
 import re
 import shutil
-import subprocess
 import tempfile
 from pathlib import Path
 
 from blockcode.codegen.emitter import Generated
 from blockcode.errors import friendly
 from blockcode.run import MAX_ROWS, RunError, RunResult, TableResult
+from blockcode.run.python_runner import TOO_MUCH
+from blockcode.run.sandbox import MAX_PLOTS, child_env, run_captured
 
 TIMEOUT_S = 20.0
 
@@ -78,6 +79,8 @@ for (.bc_n in .bc_names) {
     write.csv(head(.bc_df, %(max_rows)d), file.path(.bc_out, paste0("table_", .bc_n, ".csv")),
               row.names = FALSE, na = "")
     writeLines(as.character(nrow(.bc_df)), file.path(.bc_out, paste0("rows_", .bc_n, ".txt")))
+    writeLines(vapply(.bc_df, function(x) class(x)[1], ""),
+               file.path(.bc_out, paste0("types_", .bc_n, ".txt")))
   }
 }
 ''' % {"max_rows": MAX_ROWS}
@@ -103,16 +106,20 @@ def _error_line(code: list[str], first: int | None, last: int | None, call: str,
     return first
 
 
-def _cell(v: str):
+def _cell(v: str, kind: str = ""):
+    """A value from R's CSV, typed by its column's R class (text stays text, so "007" in a
+    character column isn't turned into 7)."""
     if v == "":
         return None
+    if kind in ("character", "factor", "Date", "POSIXct", "difftime", "hms"):
+        return v
+    if kind == "logical" or v in ("TRUE", "FALSE"):
+        return v == "TRUE" if v in ("TRUE", "FALSE") else v
     for cast in (int, float):
         try:
             return cast(v)
         except ValueError:
             pass
-    if v in ("TRUE", "FALSE"):
-        return v == "TRUE"
     return v
 
 
@@ -122,26 +129,28 @@ def run_r(gen: Generated, project_dir: Path, names: list[str],
     exe = rscript()
     if exe is None:
         result.ok = False
-        result.error = RunError(kind="NoR", message="R isn't installed on this computer, so "
-                                "R code can't run here. You can still read and export it.")
+        result.error = RunError(kind="NoR", message="R isn't installed where BlockCode is "
+                                "running, so R code can't run here. You can still read it and "
+                                "export it to run in RStudio.")
         return result
     code, nums = strip_quarto(gen)
     with tempfile.TemporaryDirectory(prefix="blockcode-r-") as tmp:
         tmpd = Path(tmp)
-        (tmpd / "program.R").write_text(code)
+        (tmpd / "program.R").write_text(code, encoding="utf-8")
         (tmpd / "h.R").write_text(HARNESS)
-        try:
-            proc = subprocess.run([exe, "--vanilla", str(tmpd / "h.R"), str(tmpd),
-                                   ",".join(names), str(tmpd / "program.R")], cwd=project_dir, capture_output=True,
-                                  text=True, timeout=timeout)
-        except subprocess.TimeoutExpired:
+        ran = run_captured([exe, "--vanilla", str(tmpd / "h.R"), str(tmpd), ",".join(names),
+                            str(tmpd / "program.R")], cwd=project_dir, timeout=timeout,
+                           env=child_env(), scratch=tmpd)
+        result.stdout = ran.stdout
+        if ran.timed_out or ran.too_much:
             result.ok = False
-            result.error = RunError(kind="Timeout", message=friendly("Timeout", "", "r"))
+            result.error = (RunError(kind="Timeout", message=friendly("Timeout", "", "r"))
+                            if ran.timed_out else
+                            RunError(kind="TooMuchOutput", message=TOO_MUCH))
             return result
-        result.stdout = proc.stdout
         err = tmpd / "error.txt"
         if err.exists():
-            lines = err.read_text().splitlines()
+            lines = err.read_text(encoding="utf-8", errors="replace").splitlines()
             first = int(lines[0]) if lines and lines[0].isdigit() else None
             last = int(lines[1]) if len(lines) > 1 and lines[1].isdigit() else first
             call, msg = (lines[2] if len(lines) > 2 else ""), "\n".join(lines[3:])
@@ -155,12 +164,17 @@ def run_r(gen: Generated, project_dir: Path, names: list[str],
         for n in names:
             t = tmpd / f"table_{n}.csv"
             if t.exists():
-                with open(t, newline="") as f:
+                with open(t, newline="", encoding="utf-8") as f:
                     rows = list(csv.reader(f))
                 total = int((tmpd / f"rows_{n}.txt").read_text().strip() or 0)
-                result.tables.append(TableResult(name=n, columns=rows[0] if rows else [],
-                                                 rows=[[_cell(v) for v in r] for r in rows[1:]],
-                                                 total_rows=total))
-        for png in sorted(tmpd.glob("plot*.png"), key=lambda p: int(re.sub(r"\D", "", p.stem))):
+                kinds_file = tmpd / f"types_{n}.txt"
+                kinds = kinds_file.read_text().splitlines() if kinds_file.exists() else []
+                kind = lambda i: kinds[i] if i < len(kinds) else ""  # noqa: E731
+                result.tables.append(TableResult(
+                    name=n, columns=rows[0] if rows else [],
+                    rows=[[_cell(v, kind(i)) for i, v in enumerate(r)] for r in rows[1:]],
+                    total_rows=total))
+        pngs = sorted(tmpd.glob("plot*.png"), key=lambda p: int(re.sub(r"\D", "", p.stem)))
+        for png in pngs[:MAX_PLOTS]:
             result.plots.append(base64.b64encode(png.read_bytes()).decode())
     return result

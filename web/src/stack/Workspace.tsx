@@ -1,11 +1,14 @@
 import { useDroppable } from '@dnd-kit/core';
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { insertBlock, stackNames } from '../ir';
+import { PasteData } from '../sidebar/PasteData';
+import { useUpload } from '../sidebar/upload';
 import { effectiveLang, useStore } from '../store';
+import { blockColour } from '../theme';
 import type { Lang } from '../types';
 import { ScopeProvider } from './fields';
 import { StatementList } from './Blocks';
-import { useUpload } from '../sidebar/upload';
-import { stackNames } from '../ir';
+import { makeBlock } from './make';
 
 function EndZone({ index }: { index: number }) {
   const { setNodeRef, isOver, active } = useDroppable({
@@ -43,8 +46,8 @@ export function Workspace() {
       if (!hasFiles(e)) return;
       e.preventDefault();
       depth = 0;
-      const f = e.dataTransfer?.files?.[0];
-      if (f) upload(f);
+      const files = e.dataTransfer?.files;
+      if (files?.length) upload(files);
       else dispatch({ type: 'dropping', on: false });
     };
     window.addEventListener('dragenter', enter);
@@ -66,12 +69,7 @@ export function Workspace() {
         onClick={() => dispatch({ type: 'focus', id: null })} data-testid="workspace">
         <ScopeProvider value={{ lang, tables, stacks: stackNames(state.program) }}>
           <div className="program">
-            {!blocks.length && (
-              <p className="empty-hint">
-                Drag a table or a <b>FROM</b> block here to start. Then snap steps like <b>WHERE</b> and{' '}
-                <b>GROUP BY</b> underneath, or type code in the Code tab and the blocks will build themselves.
-              </p>
-            )}
+            {!blocks.length && (tables.length ? <StartHint /> : <Welcome />)}
             <StatementList blocks={blocks} parent={null} stack="" />
             <EndZone index={blocks.length} />
           </div>
@@ -83,22 +81,86 @@ export function Workspace() {
   );
 }
 
-function DropOverlay() {
-  const { state } = useStore();
-  const t = state.dropped;
+/** First visit: nothing loaded yet. */
+function Welcome() {
+  const upload = useUpload();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [pasting, setPasting] = useState(false);
   return (
-    <div className="overlay" aria-live="polite">
+    <div className="welcome" onClick={(e) => e.stopPropagation()} data-testid="welcome">
+      <h1>Build data code with blocks</h1>
+      <p className="lede">
+        Add a CSV, snap blocks together, and read the same steps as <b>SQL</b>, <b>Python</b> (pandas) and <b>R</b> (dplyr).
+        Type code instead, and the blocks build themselves.
+      </p>
+      <div className="welcome-actions">
+        <button className="btn primary" onClick={() => fileRef.current?.click()}>Choose a CSV file</button>
+        <button className="btn small" onClick={() => setPasting(true)}>Paste data</button>
+        <span>or drop a file anywhere on this page</span>
+      </div>
+      <input ref={fileRef} type="file" accept=".csv,.tsv,.txt,text/csv" multiple className="sr-only" aria-label="Choose a CSV file to start"
+        onChange={(e) => { if (e.target.files?.length) upload(e.target.files); e.target.value = ''; }} />
+      <ol className="steps">
+        <li><b>1</b><span><em>Add your data.</em> Any CSV works: exports from Excel, Google Sheets or a database.</span></li>
+        <li><b>2</b><span><em>Snap blocks.</em> Filter, group, join and sort. Hover any block to see what it does to the rows.</span></li>
+        <li><b>3</b><span><em>Run and export.</em> See the result, then download code that runs on its own.</span></li>
+      </ol>
+      <p className="privacy">Your files stay in this browser. They're sent to the server only to run or export your code, and aren't kept there.</p>
+      {pasting && <PasteData onClose={() => setPasting(false)} />}
+    </div>
+  );
+}
+
+/** Tables loaded, no blocks yet: one click starts a stack. */
+function StartHint() {
+  const { state, dispatch } = useStore();
+  const lang = effectiveLang(state);
+  const tables = state.project?.tables ?? [];
+  const start = (table: string) => {
+    const b = makeBlock('from', state.program, tables, { table });
+    dispatch({ type: 'program', program: insertBlock(state.program, b, null, '', state.program.blocks.length) });
+    dispatch({ type: 'focus', id: b.id });
+  };
+  return (
+    <div className="start-hint" onClick={(e) => e.stopPropagation()}>
+      <p>Start a stack from a table:</p>
+      <div className="start-chips">
+        {tables.map((t) => (
+          <button key={t.name} className="pal-block start" style={{ background: blockColour(lang, 'from')?.bg }} onClick={() => start(t.name)}>
+            {lang === 'sql' ? 'FROM' : 'From'} <span>{t.name}</span>
+          </button>
+        ))}
+      </div>
+      <p className="muted">
+        Or drag a table here. Then add steps like <b>WHERE</b> and <b>GROUP BY</b> from the left, or type code in the Code tab and
+        the blocks build themselves.
+      </p>
+    </div>
+  );
+}
+
+function DropOverlay() {
+  const { state, dispatch } = useStore();
+  const t = state.dropped?.table;
+  const notes = state.dropped?.notes ?? [];
+  return (
+    <div className="overlay" aria-live="polite" onClick={(e) => { e.stopPropagation(); dispatch({ type: 'dropped', dropped: null }); }}>
       <h2>{t ? `Loaded ${t.name}` : 'Drop to load your CSV'}</h2>
       {t && (
         <>
           <div className="found">
-            <div className="top"><span style={{ fontFamily: 'var(--head)', fontWeight: 800, fontSize: 16, color: 'var(--ink)' }}>Columns we found</span><span>{t.rows.toLocaleString()} rows</span></div>
-            {t.columns.map((c) => (
-              <div className="row" key={c.name}><span>{c.name}</span><span>{c.type}{c.empty ? ` · ${c.empty} empty` : ''}</span></div>
-            ))}
+            <div className="top"><span style={{ fontFamily: 'var(--head)', fontWeight: 800, fontSize: 16, color: 'var(--ink)' }}>Columns we found</span><span>{t.rows.toLocaleString()} row{t.rows === 1 ? '' : 's'}</span></div>
+            <div className="found-rows">
+              {t.columns.map((c) => (
+                <div className="row" key={c.name}><span>{c.name}</span><span>{c.type}{c.empty ? ` · ${c.empty.toLocaleString()} empty` : ''}</span></div>
+              ))}
+            </div>
+            {notes.length > 0 && (
+              <ul className="notes">{notes.map((n) => <li key={n}>{n}</li>)}</ul>
+            )}
           </div>
           <div style={{ fontSize: 15, color: 'var(--muted)' }}>
-            Saved to {t.file.split('/')[0]}/ and loaded as the table <span style={{ fontFamily: 'var(--mono)' }}>{t.name}</span>.
+            Loaded as the table <span style={{ fontFamily: 'var(--mono)' }}>{t.name}</span>. Pick it in any FROM or JOIN block.
           </div>
         </>
       )}

@@ -143,13 +143,13 @@ def export(name: str, target: str = TARGET, projects_dir: Path = PROJECTS,
 
 
 @app.command()
-def serve(host: str = "127.0.0.1", port: int = 8000, projects_dir: Path = PROJECTS) -> None:
-    """Start the local web editor."""
+def serve(host: str = "127.0.0.1", port: int = 8000) -> None:
+    """Start the web editor. Each visitor's tables and blocks stay in their own browser."""
     import uvicorn
 
     from blockcode.server import create_app
 
-    uvicorn.run(create_app(projects_dir), host=host, port=port)
+    uvicorn.run(create_app(), host=host, port=port)
 
 
 @app.command()

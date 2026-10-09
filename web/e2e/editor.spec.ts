@@ -1,5 +1,17 @@
 import { expect, test, type Page } from '@playwright/test';
 
+const SAMPLE = '../blockcode/data/sample';
+const DEPARTMENTS = `SELECT dept,
+       AVG(grade) AS avg_grade,
+       COUNT(*) AS n
+FROM enrolments
+JOIN courses USING (course_id)
+WHERE grade > 50
+GROUP BY dept
+HAVING COUNT(*) >= 10
+ORDER BY avg_grade DESC
+LIMIT 5;`;
+
 async function blockIds(page: Page) {
   return page.locator('[data-block]').evaluateAll((els) => els.map((e) => e.getAttribute('data-block')));
 }
@@ -22,24 +34,122 @@ async function runTable(page: Page) {
     rows.map((r) => Array.from(r.querySelectorAll('td')).slice(1).map((td) => td.textContent)));
 }
 
-let n = 0;
-async function open(page: Page) {
-  n += 1;
-  await page.goto(`/?project=e2e-${Date.now().toString(36)}-${n}`);
-  await expect(page.locator('[data-type="from"]').first()).toBeVisible();
+async function addFiles(page: Page, files: Parameters<ReturnType<Page['locator']>['setInputFiles']>[0], count: number) {
+  await page.locator('input[type=file]').first().setInputFiles(files);
+  await expect(page.locator('.table-card')).toHaveCount(count);
+  await page.locator('.overlay').click(); // dismiss "Columns we found"
+  await expect(page.locator('.overlay')).toHaveCount(0);
 }
 
-test('drop a CSV, build a stack, flip languages, run both', async ({ page }) => {
-  await open(page);
-  // start again from an empty workspace
-  await page.getByRole('button', { name: 'Examples ▾' }).click();
-  await page.getByRole('menuitem', { name: 'Empty workspace' }).click();
-  await expect(page.locator('[data-block]')).toHaveCount(0);
+/** A fresh visitor: blank workspace, then the school CSVs and (optionally) a program typed as SQL. */
+async function open(page: Page, program = true) {
+  await page.goto('/');
+  await expect(page.getByTestId('welcome')).toBeVisible();
+  await addFiles(page, ['students', 'courses', 'enrolments'].map((t) => `${SAMPLE}/${t}.csv`), 3);
+  if (program) {
+    await typeCode(page, DEPARTMENTS);
+    await page.getByRole('button', { name: 'Tidy' }).click();
+    await expect(page.locator('[data-type="join"]')).toBeVisible();
+  }
+}
 
+test('a new visitor starts blank; work stays in their browser until they start again', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('welcome')).toBeVisible();
+  await expect(page.locator('.table-card')).toHaveCount(0);
+  await expect(page.locator('[data-block]')).toHaveCount(0);
+  await expect(page.getByTestId('run')).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'FROM', exact: true })).toBeDisabled();
+
+  await addFiles(page, '../tests/fixtures/pets.csv', 1);
+  await page.locator('.pal-block.start', { hasText: 'pets' }).click();
+  await expect(page.locator('[data-type="from"]')).toHaveCount(1);
+  await page.getByRole('textbox', { name: 'Name of this analysis' }).fill('Pet survey');
+  await expect(page.getByTestId('saved')).toHaveText('Saved in this browser');
+
+  await page.reload();
+  await expect(page.locator('.table-card', { hasText: 'pets' })).toBeVisible();
+  await expect(page.locator('[data-type="from"]')).toHaveCount(1);
+  await expect(page.getByRole('textbox', { name: 'Name of this analysis' })).toHaveValue('Pet survey');
+
+  await page.getByRole('button', { name: 'New', exact: true }).click();
+  await page.getByRole('button', { name: 'Clear everything' }).click();
+  await expect(page.getByTestId('welcome')).toBeVisible();
+  await page.reload();
+  await expect(page.getByTestId('welcome')).toBeVisible();
+  await expect(page.locator('.table-card')).toHaveCount(0);
+});
+
+test('visitors never see each other\'s tables', async ({ browser }) => {
+  const a = await (await browser.newContext()).newPage();
+  const b = await (await browser.newContext()).newPage();
+  await a.goto('/');
+  await addFiles(a, '../tests/fixtures/pets.csv', 1);
+  await b.goto('/');
+  await expect(b.getByTestId('welcome')).toBeVisible();
+  await expect(b.locator('.table-card')).toHaveCount(0);
+});
+
+test('awkward files are tidied and every language agrees on them', async ({ page }) => {
+  await page.goto('/');
+  const semicolons = 'city;country;population\nParis;France;2148000\nLyon;France;513000\nBerlin;Germany;3645000\n';
+  await page.locator('input[type=file]').first().setInputFiles({ name: 'Cities (EU).csv', mimeType: 'text/csv', buffer: Buffer.from(semicolons) });
+  await expect(page.getByText('Split columns on semicolons.')).toBeVisible();
+  await page.locator('.overlay').click();
+  const card = page.locator('.table-card', { hasText: 'cities_eu' });
+  await expect(card).toContainText('population');
+
+  const latin = Buffer.from('ville,note\nCaf\xe9,3\n\xc9cole,4\n', 'latin1');
+  await page.locator('input[type=file]').first().setInputFiles({ name: 'villes.csv', mimeType: 'text/csv', buffer: latin });
+  await expect(page.getByText('Read the file as Windows-1252 text.')).toBeVisible();
+  await page.locator('.overlay').click();
+  await expect(page.locator('.table-card', { hasText: 'villes' })).toBeVisible();
+
+  // an Excel file and an empty file are refused with a reason
+  await page.locator('input[type=file]').first().setInputFiles({ name: 'book.xlsx', mimeType: 'application/octet-stream', buffer: Buffer.from('PK') });
+  await expect(page.getByText(/Save it as CSV first/)).toBeVisible();
+  await page.locator('input[type=file]').first().setInputFiles({ name: 'empty.csv', mimeType: 'text/csv', buffer: Buffer.from('') });
+  await expect(page.getByText(/That file is empty/)).toBeVisible();
+
+  await page.getByRole('tab', { name: 'Code' }).click();
+  await typeCode(page, 'SELECT country, SUM(population) AS people\nFROM cities_eu\nGROUP BY country\nORDER BY country;');
+  const sqlRows = await runTable(page);
+  expect(sqlRows).toEqual([['France', '2661000'], ['Germany', '3645000']]);
+  await page.getByRole('tab', { name: 'Code' }).click();
+  await page.getByRole('tab', { name: 'Python' }).click();
+  expect(await runTable(page)).toEqual(sqlRows);
+});
+
+test('paste data from a spreadsheet, then remove a table', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTestId('welcome').getByRole('button', { name: 'Paste data' }).click();
+  await page.getByRole('textbox', { name: 'Table name' }).fill('Team scores');
+  await page.getByRole('textbox', { name: 'Data to paste' }).fill('name\tscore\nAna\t31\nBo\t25\nCy\t40\n');
+  await expect(page.getByText('3 rows + a header')).toBeVisible();
+  await page.getByRole('button', { name: 'Add table' }).click();
+  await expect(page.locator('.table-card', { hasText: 'team_scores' })).toContainText('3 rows');
+  await page.locator('.overlay').click();
+
+  await page.locator('.pal-block.start').click();
+  await page.getByRole('button', { name: 'WHERE', exact: true }).click();
+  const rows = await runTable(page);
+  expect(rows).toEqual([['Cy', '40']]); // the new filter starts at the median (31), so it keeps rows
+
+  await page.getByRole('button', { name: 'Remove table team_scores', exact: true }).click();
+  await expect(page.getByText('1 block uses this table')).toBeVisible();
+  await page.getByRole('button', { name: 'Remove table', exact: true }).click();
+  await expect(page.locator('.table-card')).toHaveCount(0);
+  await page.getByRole('tab', { name: /Problems/ }).click();
+  await expect(page.getByText(/no table called "team_scores"/)).toBeVisible();
+});
+
+test('drop a CSV, build a stack, flip languages, run both', async ({ page }) => {
+  await open(page, false);
   // drop a CSV: it is loaded as a table and shown with its column types
-  await page.locator('input[type=file]').setInputFiles('../tests/fixtures/pets.csv');
+  await page.locator('input[type=file]').first().setInputFiles('../tests/fixtures/pets.csv');
   await expect(page.getByText('Columns we found')).toBeVisible();
   await expect(page.locator('.table-card', { hasText: 'pets' })).toContainText('2 empty values');
+  await page.locator('.overlay').click();
 
   // FROM pets → WHERE → GROUP BY, by clicking the palette
   await page.getByRole('button', { name: 'FROM', exact: true }).click();

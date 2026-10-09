@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import keyword
+
 from blockcode.codegen import generate
 from blockcode.diagnostics import Diagnostic, error, warning
 from blockcode.ir import Block, Program, TableInfo
@@ -13,6 +15,8 @@ def validate(program: Program, tables: dict[str, TableInfo], target: str,
     diags = list(gen.diagnostics)
     if target != "sql":
         diags += check_variables(program)
+    if target == "python":
+        diags += check_names(program)
     seen: set[tuple] = set()
     out = []
     for d in diags:
@@ -21,6 +25,23 @@ def validate(program: Program, tables: dict[str, TableInfo], target: str,
             seen.add(key)
             out.append(d)
     return out
+
+
+PY_TAKEN = {"pd", "plt", "np"}  # the generated Python already uses these
+
+
+def check_names(program: Program) -> list[Diagnostic]:
+    """Result, variable and loop names become Python variables, so they must be valid ones."""
+    diags: list[Diagnostic] = []
+    for b in program.walk():
+        name = {"from": b.field("name") or "out", "setvar": b.field("name"),
+                "changevar": b.field("name"), "foreach": b.field("var"),
+                "repeat": b.field("var")}.get(b.type)
+        if name and (not name.isidentifier() or keyword.iskeyword(name) or name in PY_TAKEN):
+            diags.append(error(f'"{name}" can\'t be a name in Python. Pick another one that '
+                               f"starts with a letter and isn't a Python word like for or "
+                               f"class.", b.id))
+    return diags
 
 
 def check_variables(program: Program) -> list[Diagnostic]:

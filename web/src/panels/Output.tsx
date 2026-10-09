@@ -9,6 +9,20 @@ export function Output() {
   const lang = effectiveLang(state);
   if (state.running) return <div className="status" style={{ animation: 'pulse 1s infinite' }}>Running {LANG_LABEL[lang]}…</div>;
   if (!run) {
+    if (!state.program.blocks.length) {
+      return <div className="placeholder" style={{ marginTop: 18 }}>Add some blocks, then press Run to see the result here.</div>;
+    }
+    if (lang === 'r' && !state.rReady) {
+      return (
+        <div className="placeholder" style={{ marginTop: 18 }}>
+          R isn't installed on this server, so R code can't run here.<br />Export the .qmd and open it in RStudio, or run the same blocks as:
+          <span style={{ display: 'flex', gap: 8 }}>
+            <button className="btn small" onClick={() => dispatch({ type: 'lang', lang: 'sql' })}>SQL</button>
+            <button className="btn small" onClick={() => dispatch({ type: 'lang', lang: 'python' })}>Python</button>
+          </span>
+        </div>
+      );
+    }
     return (
       <div className="placeholder" style={{ marginTop: 18 }}>
         Press Run to see the result

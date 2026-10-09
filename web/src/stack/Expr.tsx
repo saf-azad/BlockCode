@@ -5,6 +5,7 @@ import { useDroppable } from '@dnd-kit/core';
 import { mk, parseLiteral } from '../ir';
 import type { Block } from '../types';
 import { ColumnPick, Pick, TextIn, useScope, useWords, type Scope } from './fields';
+import { startingCondition } from './make';
 
 export const EXPR_KINDS: { kind: string; label: string; data: boolean; imperative: boolean }[] = [
   { kind: 'col', label: 'column', data: true, imperative: false },
@@ -46,7 +47,10 @@ export function makeExpr(kind: string, scope: Scope): Block {
       const rf = scope.rowFields[scope.rowFields.length - 1];
       return mk('field', { var: rf?.name ?? 'row', name: rf?.columns[0]?.name ?? '' });
     }
-    case 'cmp': return mk('cmp', { op: '>' }, { a: subject(['int', 'float']), b: mk('lit', { value: 50 }) });
+    case 'cmp': {
+      if (!scope.imperative) return startingCondition(scope.columns);
+      return mk('cmp', { op: '>' }, { a: subject(['int', 'float']), b: mk('lit', { value: 0 }) });
+    }
     case 'and': case 'or': return mk('logic', { op: kind });
     case 'not': return mk('not');
     case 'math': return mk('math', { op: '+' }, { a: subject(['int', 'float']), b: mk('lit', { value: 1 }) });

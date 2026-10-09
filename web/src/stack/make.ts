@@ -1,5 +1,5 @@
 // New blocks from the palette, pre-filled from what is on the workspace (columns, stacks, loops).
-import { columnsAt, freshStackName, mk, ownerStack, stackNames, resultColumns, variables, walk } from '../ir';
+import { columnsAt, freshStackName, mk, ownerStack, stackNames, resultColumns, variables, walk, type Col } from '../ir';
 import type { Block, Program, TableInfo } from '../types';
 
 const numeric = (t: string) => t === 'int' || t === 'float';
@@ -31,7 +31,7 @@ export function makeBlock(type: string, program: Program, tables: TableInfo[], o
       return mk('join', { table: candidate?.name ?? '', on, how: 'inner' });
     }
     case 'where':
-      return mk('where', {}, { cond: mk('cmp', { op: '>' }, { a: mk('col', { name: firstNum }), b: mk('lit', { value: 50 }) }) });
+      return mk('where', {}, { cond: startingCondition(cols) });
     case 'derive':
       return mk('derive', { name: 'new_column' }, { expr: mk('math', { op: '*' }, { a: mk('col', { name: firstNum }), b: mk('lit', { value: 2 }) }) });
     case 'group': {
@@ -42,7 +42,7 @@ export function makeBlock(type: string, program: Program, tables: TableInfo[], o
     case 'having': {
       const g = from?.stacks.steps?.find((s) => s.type === 'group');
       const alias = g?.fields.aggs?.find((a: any) => a.func === 'count')?.as ?? g?.fields.aggs?.[0]?.as ?? 'n';
-      return mk('having', {}, { cond: mk('cmp', { op: '>=' }, { a: mk('col', { name: alias }), b: mk('lit', { value: 10 }) }) });
+      return mk('having', {}, { cond: mk('cmp', { op: '>=' }, { a: mk('col', { name: alias }), b: mk('lit', { value: 2 }) }) });
     }
     case 'select':
       return mk('select', { columns: cols.slice(0, 2).map((c) => c.name) });
@@ -85,6 +85,16 @@ export function makeBlock(type: string, program: Program, tables: TableInfo[], o
     default:
       return mk(type);
   }
+}
+
+/** A first filter that keeps some rows: a number above its median, or the most common text. */
+export function startingCondition(cols: Col[]): Block {
+  const num = cols.find((c) => numeric(c.type) && typeof c.typical === 'number');
+  if (num) return mk('cmp', { op: '>' }, { a: mk('col', { name: num.name }), b: mk('lit', { value: num.typical }) });
+  const text = cols.find((c) => c.type === 'text' && typeof c.typical === 'string');
+  if (text) return mk('cmp', { op: '=' }, { a: mk('col', { name: text.name }), b: mk('lit', { value: text.typical }) });
+  const any = cols.find((c) => numeric(c.type)) ?? cols[0];
+  return mk('cmp', { op: '>' }, { a: mk('col', { name: any?.name ?? '' }), b: mk('lit', { value: 0 }) });
 }
 
 function freshVar(program: Program): string {

@@ -8,7 +8,6 @@ final value of each pipeline variable, and turns a traceback into a line number.
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -16,8 +15,11 @@ from pathlib import Path
 from blockcode.codegen.emitter import Generated
 from blockcode.errors import friendly
 from blockcode.run import MAX_ROWS, RunError, RunResult, TableResult
+from blockcode.run.sandbox import MAX_PLOTS, child_env, run_captured
 
 TIMEOUT_S = 10.0
+TOO_MUCH = ("Your program printed so much that it was stopped. Print fewer rows, or add a "
+            "Limit block.")
 
 HARNESS = r'''
 import base64, io, json, sys, traceback
@@ -30,6 +32,8 @@ _figs = []
 
 def _show(*args, **kwargs):
     for num in _plt.get_fignums():
+        if len(_figs) >= %(max_plots)d:
+            break
         buf = io.BytesIO()
         _plt.figure(num).savefig(buf, format="png", dpi=110, bbox_inches="tight")
         _figs.append(base64.b64encode(buf.getvalue()).decode())
@@ -75,7 +79,7 @@ except BaseException as e:
         _err = {"kind": type(e).__name__, "detail": str(e), "line": None}
 with open(_out_path, "w", encoding="utf-8") as f:
     json.dump({"error": _err, "tables": _tables, "plots": _figs}, f, default=str)
-''' % {"max_rows": MAX_ROWS}
+''' % {"max_rows": MAX_ROWS, "max_plots": MAX_PLOTS}
 
 
 def run_python(gen: Generated, project_dir: Path, names: list[str],
@@ -86,25 +90,23 @@ def run_python(gen: Generated, project_dir: Path, names: list[str],
         code_path, out_path, harness = tmpd / "program.py", tmpd / "result.json", tmpd / "h.py"
         code_path.write_text(gen.code, encoding="utf-8")
         harness.write_text(HARNESS, encoding="utf-8")
-        try:
-            proc = subprocess.run(
-                [sys.executable, "-X", "utf8", str(harness), str(code_path), str(out_path),
-                 json.dumps(names)],
-                cwd=project_dir, capture_output=True, text=True, timeout=timeout,
-                env=_env(),
-            )
-        except subprocess.TimeoutExpired as exc:
+        ran = run_captured(
+            [sys.executable, "-X", "utf8", str(harness), str(code_path), str(out_path),
+             json.dumps(names)], cwd=project_dir, timeout=timeout, env=_env(), scratch=tmpd)
+        result.stdout = ran.stdout
+        if ran.timed_out:
             result.ok = False
-            out = exc.stdout.decode() if isinstance(exc.stdout, bytes) else (exc.stdout or "")
-            result.stdout = out
             result.error = RunError(kind="Timeout", message=friendly("Timeout", "", "python"),
                                     detail=f"Stopped after {timeout:g} seconds.")
             return result
-        result.stdout = proc.stdout
+        if ran.too_much:
+            result.ok = False
+            result.error = RunError(kind="TooMuchOutput", message=TOO_MUCH)
+            return result
         if not out_path.exists():
             result.ok = False
             result.error = RunError(kind="Crash", message="Python stopped unexpectedly.",
-                                    detail=proc.stderr[-2000:])
+                                    detail=ran.stderr[-2000:])
             return result
         data = json.loads(out_path.read_text(encoding="utf-8"))
     result.tables = [TableResult(**t) for t in data["tables"]]
@@ -124,9 +126,11 @@ def run_python(gen: Generated, project_dir: Path, names: list[str],
 def _env() -> dict:
     import os
 
-    env = {k: v for k, v in os.environ.items() if k not in ("PYTHONSTARTUP",)}
-    env["MPLBACKEND"] = "Agg"
-    # matplotlib caches fonts in its config dir; make sure it is writable (read-only $HOME on Vercel)
-    env.setdefault("MPLCONFIGDIR", os.path.join(tempfile.gettempdir(), "blockcode-mpl"))
-    env["PYTHONIOENCODING"] = "utf-8"
-    return env
+    return child_env(
+        # the child imports pandas and matplotlib from wherever this server found them
+        PYTHONPATH=os.pathsep.join(p for p in sys.path if p),
+        MPLBACKEND="Agg",
+        # matplotlib caches fonts in its config dir; it must be writable (read-only $HOME on
+        # Vercel)
+        MPLCONFIGDIR=os.path.join(tempfile.gettempdir(), "blockcode-mpl"),
+    )

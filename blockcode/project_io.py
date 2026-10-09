@@ -11,7 +11,7 @@ import re
 import shutil
 from pathlib import Path
 
-from blockcode.data_io import ingest, table_name_for
+from blockcode.data_io import CsvError, add_table, ingest, table_name_for
 from blockcode.ir import Program, Project, TableInfo
 
 SAMPLE_DIR = Path(__file__).resolve().parent / "data" / "sample"
@@ -82,17 +82,11 @@ class ProjectStore:
 
     def add_csv(self, name: str, filename: str, content: bytes) -> TableInfo:
         project = self.load(name)
-        d = self.dir(name)
-        table = table_name_for(filename)
-        dest = d / "data" / f"{table}.csv"
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(content)
         try:
-            info = ingest(dest, d, self.db_path(name), table)
-        except Exception as exc:  # pandas raises many kinds of parse errors
-            dest.unlink(missing_ok=True)
-            raise ProjectError(f"That file doesn't look like a CSV I can read: {exc}") from exc
-        project.tables = [t for t in project.tables if t.name != table] + [info]
+            info, _ = add_table(self.dir(name), self.db_path(name), filename, content)
+        except CsvError as exc:
+            raise ProjectError(str(exc)) from exc
+        project.tables = [t for t in project.tables if t.name != info.name] + [info]
         self.save(project)
         return info
 

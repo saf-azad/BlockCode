@@ -4,7 +4,7 @@ import { HighlightStyle, StreamLanguage, syntaxHighlighting } from '@codemirror/
 import { r as rMode } from '@codemirror/legacy-modes/mode/r';
 import { linter, lintGutter, setDiagnostics, type Diagnostic as CmDiagnostic } from '@codemirror/lint';
 import { Annotation, Compartment, EditorState, RangeSetBuilder, StateEffect, StateField } from '@codemirror/state';
-import { Decoration, EditorView, keymap, lineNumbers, type DecorationSet } from '@codemirror/view';
+import { Decoration, EditorView, keymap, lineNumbers, placeholder, type DecorationSet } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { tags as t } from '@lezer/highlight';
 import { useEffect, useMemo, useRef } from 'react';
@@ -100,6 +100,7 @@ export function CodePanel() {
           lintGutter(),
           linter(null),
           EditorView.lineWrapping,
+          placeholder('The code for your blocks appears here.\n\nYou can also type or paste SQL, Python (pandas) or R (dplyr) here, and the blocks will build themselves.'),
           EditorView.contentAttributes.of({ 'aria-label': 'Code', 'data-testid': 'code' }),
           EditorView.updateListener.of((u) => {
             if (u.docChanged && !u.transactions.some((tr) => tr.annotation(External))) {
@@ -145,7 +146,7 @@ export function CodePanel() {
     const typed = editing.text;
     const timer = setTimeout(async () => {
       try {
-        const res = await api.parse(state.projectName, typed, lang, state.program);
+        const res = await api.parse(typed, lang, state.project?.tables ?? [], state.program);
         dispatch({ type: 'parsed', parse: res, text: typed });
         if (res.ok && res.program) dispatch({ type: 'program', program: res.program, fromCode: true });
       } catch (e) {

@@ -14,7 +14,7 @@ export default defineConfig({
     launchOptions: process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {},
   },
   webServer: {
-    command: 'rm -rf ../.e2e-projects && cd .. && uv run blockcode serve --port 8799 -d .e2e-projects',
+    command: 'cd .. && uv run blockcode serve --port 8799',
     url: 'http://127.0.0.1:8799/api/health',
     reuseExistingServer: false,
     timeout: 60_000,

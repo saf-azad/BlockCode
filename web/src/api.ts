@@ -1,11 +1,18 @@
-import type { Erd, Generated, Lang, ParseResult, Program, Project, RunResult, TableInfo, BlockSpec } from './types';
+import type { StoredTable } from './local';
+import type { BlockSpec, Erd, Generated, Lang, ParseResult, Program, RunResult, TableInfo } from './types';
 
 async function call<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init);
+  let res: Response;
+  try {
+    res = await fetch(url, init);
+  } catch {
+    throw new Error("Can't reach BlockCode right now. Check your connection and try again.");
+  }
   if (!res.ok) {
-    let message = res.statusText;
+    let message = res.status === 413 ? 'That is too much data to send at once.' : res.statusText || `Error ${res.status}`;
     try {
-      message = (await res.json()).detail ?? message;
+      const detail = (await res.json()).detail;
+      if (typeof detail === 'string') message = detail;
     } catch {
       /* not JSON */
     }
@@ -20,30 +27,52 @@ const json = (body: unknown): RequestInit => ({
   body: JSON.stringify(body),
 });
 
-const p = (project: string) => `/api/projects/${encodeURIComponent(project)}`;
+/** A run or export request: the program as JSON plus every table's CSV. */
+function withData(body: unknown, tables: StoredTable[]): RequestInit {
+  const form = new FormData();
+  form.append('request', JSON.stringify(body));
+  for (const t of tables) form.append('files', t.data, `${t.info.name}.csv`);
+  return { method: 'POST', body: form };
+}
+
+export interface Health {
+  ok: boolean;
+  version: string;
+  r: boolean;
+  max_file: number;
+}
 
 export const api = {
+  health: () => call<Health>('/api/health'),
   blocks: () => call<{ blocks: BlockSpec[]; step_order: string[] }>('/api/blocks'),
-  project: (name: string) => call<Project>(p(name)),
-  saveProgram: (name: string, program: Program) =>
-    call<{ ok: boolean }>(`${p(name)}/program`, { ...json(program), method: 'PUT' }),
-  generateAll: (name: string, program: Program) =>
-    call<Record<Lang, Generated>>(`${p(name)}/generate-all`, json({ program, target: 'sql' })),
-  run: (name: string, program: Program, target: Lang) =>
-    call<RunResult>(`${p(name)}/run`, json({ program, target })),
-  parse: (name: string, code: string, lang: Lang, previous: Program) =>
-    call<ParseResult>(`${p(name)}/parse`, json({ code, lang, previous })),
-  upload: async (name: string, file: File) => {
+  inspect: (data: Blob, filename: string) => {
     const form = new FormData();
-    form.append('file', file);
-    return call<{ table: TableInfo }>(`${p(name)}/data`, { method: 'POST', body: form });
+    form.append('file', data, filename);
+    return call<{ table: TableInfo; notes: string[] }>('/api/tables', { method: 'POST', body: form });
   },
-  erd: (name: string) => call<Erd>(`${p(name)}/erd`),
-  examples: () => call<{ examples: { name: string; title: string }[] }>('/api/examples'),
-  example: (name: string) => call<Program>(`/api/examples/${encodeURIComponent(name)}`),
-  export: async (name: string, program: Program, target: Lang) => {
-    const res = await fetch(`${p(name)}/export`, json({ program, target }));
-    if (!res.ok) throw new Error((await res.json()).detail ?? res.statusText);
+  generateAll: (program: Program, tables: TableInfo[], title: string) =>
+    call<Record<Lang, Generated>>('/api/generate-all', json({ program, tables, title })),
+  parse: (code: string, lang: Lang, tables: TableInfo[], previous: Program) =>
+    call<ParseResult>('/api/parse', json({ code, lang, tables, previous })),
+  erd: (tables: TableInfo[]) => call<Erd>('/api/erd', json({ tables })),
+  run: (program: Program, target: Lang, tables: StoredTable[]) =>
+    call<RunResult>('/api/run', withData({ program, target }, tables)),
+  export: async (program: Program, target: Lang, title: string, tables: StoredTable[]) => {
+    let res: Response;
+    try {
+      res = await fetch('/api/export', withData({ program, target, title }, tables));
+    } catch {
+      throw new Error("Can't reach BlockCode right now. Check your connection and try again.");
+    }
+    if (!res.ok) {
+      let message = res.statusText;
+      try {
+        message = (await res.json()).detail ?? message;
+      } catch {
+        /* not JSON */
+      }
+      throw new Error(message);
+    }
     return res.blob();
   },
 };
