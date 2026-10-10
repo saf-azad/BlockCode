@@ -36,7 +36,14 @@ def emit_pipeline(em: Emitter, plan: Plan, tables: dict[str, TableInfo], loaded:
     for j in plan.joins:
         how = ', how="left"' if j.field("how") == "left" else ""
         right = checked_name(j.field("table"), j.id)
-        em.emit(f'{out} = {out}.merge({right}, on={py_str(str(j.field("on")))}{how})', j.id)
+        key = str(j.field("on"))
+        info = tables.get(j.field("table"))
+        col = info.column(key) if info else None
+        # SQL never matches NULL keys; pandas matches NaN to NaN, so when the key can be empty
+        # drop the empty-key rows from the right table to keep the same rows
+        if col is not None and col.empty > 0:
+            right = f"{right}[{right}[{py_str(key)}].notna()]"
+        em.emit(f'{out} = {out}.merge({right}, on={py_str(key)}{how})', j.id)
     for d in plan.derives:
         em.emit(f"{out} = {out}.assign({py_kwarg(d.field('name'), r(d.inputs.get('expr')))})", d.id)
     for w in plan.wheres:

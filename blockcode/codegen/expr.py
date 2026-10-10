@@ -384,12 +384,17 @@ class RRenderer(Renderer):
         return f"{_wrap(self.sub(e, 'a'), 7)} %in% c({vals})", 7
 
     def r_text(self, e):
-        v = r_lit(str(e.field("value", "")).lower())
+        raw = str(e.field("value", "")).lower()
         fn = {"contains": "str_detect", "starts": "str_starts", "ends": "str_ends"}.get(
             e.field("op"))
         if fn is None:
             raise ExprError(f'"{e.field("op")}" is not a text test.', e.id)
-        return f"{fn}(tolower({self.sub(e, 'a')[0]}), fixed({v}))", ATOM
+        col = self.sub(e, "a")[0]
+        if raw == "":
+            # stringr errors on an empty pattern; an empty search matches every non-empty row,
+            # as it does in SQL (LIKE '%%') and pandas
+            return f"!is.na({col})", ATOM
+        return f"{fn}(tolower({col}), fixed({r_lit(raw)}))", ATOM
 
 
 class PyRenderer(Renderer):

@@ -121,9 +121,9 @@ class _Select:
         t = self.tree
         if not isinstance(t, exp.Select):
             raise Unsupported("only SELECT queries can become blocks.", self.first)
-        for key in ("with", "offset", "windows", "qualify", "distinct_on"):
+        for key in ("with", "with_", "offset", "windows", "qualify", "distinct_on"):
             if t.args.get(key):
-                raise Unsupported(f"{key.upper()} isn't a block yet.", self.first)
+                raise Unsupported(f"{key.rstrip('_').upper()} isn't a block yet.", self.first)
         src = t.args.get("from_") or t.args.get("from")
         if src is None or not isinstance(src.this, exp.Table):
             raise Unsupported("FROM needs a table name (subqueries aren't blocks yet).",
@@ -420,7 +420,12 @@ class _Select:
                 right.fields["value"] = int(right.field("value"))
             return b.math(MATHS[t], self._expr(e.this, aggs), right)
         if t is exp.Cast:
-            return self._expr(e.this, aggs)
+            # we emit CAST(x AS REAL) for decimal division; unwrap that (the block keeps the
+            # division), but a cast that changes the value (to INTEGER, TEXT, ...) isn't a block
+            reals = {exp.DataType.Type.FLOAT, exp.DataType.Type.DOUBLE, exp.DataType.Type.DECIMAL}
+            if e.to.this in reals:
+                return self._expr(e.this, aggs)
+            raise Unsupported("CAST isn't a block yet.", self._line_with("cast"))
         if t is exp.Column:
             name = e.name
             return b.col(name)

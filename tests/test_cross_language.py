@@ -24,6 +24,10 @@ def workspace(tmp_path, name, csv: bytes):
     return tmp_path, db, [info]
 
 
+def _key(row):
+    return tuple((x is None, str(type(x)), str(x)) for x in row)
+
+
 def results(tmp_path, tables, prog):
     """Each target's result rows as a set of tuples (order-insensitive), or raise on error."""
     db = tmp_path / "db.sqlite"
@@ -32,7 +36,7 @@ def results(tmp_path, tables, prog):
         r = run_in(tmp_path, db, tables, prog, t)
         assert r.ok, f"{t}: {r.error.message if r.error else '?'}"
         tbl = r.tables[-1]
-        out[t] = (tbl.columns, sorted(tuple(row) for row in tbl.rows))
+        out[t] = (tbl.columns, sorted((tuple(row) for row in tbl.rows), key=_key))
     return out
 
 
@@ -204,3 +208,34 @@ def test_sum_over_empty_group_is_null_not_zero(tmp_path):
     for tgt in ("sql", "python"):
         r = run_in(tmp_path, db, tables, prog, tgt)
         assert r.ok and r.tables[0].rows[0][1] is None, (tgt, r.tables[0].rows)
+
+
+def test_null_join_keys_never_match(tmp_path):
+    db = tmp_path / "db.sqlite"
+    sqlite3.connect(db).close()
+    from blockcode.data_io import add_table
+    lk, _ = add_table(tmp_path, db, "lk.csv", b"k,va\n1,a1\n,x\n,y\n", name="lk")
+    rk, _ = add_table(tmp_path, db, "rk.csv", b"k,vb\n1,b1\n,z\n", name="rk")
+    for how in ("inner", "left"):
+        prog = b.program(b.from_("lk", b.join("rk", "k", how)))
+        res = results(tmp_path, [lk, rk], prog)
+        assert same(res), (how, res)
+
+
+def test_empty_text_search_matches_every_nonempty_row(tmp_path):
+    d, db, tables = workspace(tmp_path, "t", b"name\nRex\nTom\n\nBo\n")
+    for op in ("contains", "starts", "ends"):
+        prog = b.program(b.from_("t", b.where(b.text(op, b.col("name"), ""))))
+        res = results(d, tables, prog)
+        assert same(res) and len(res["sql"][1]) == 3, (op, res)
+
+
+def test_cte_and_cast_are_refused_not_silently_changed():
+    from blockcode.ir import ColumnInfo, TableInfo
+    t = TableInfo(name="t", file="data/t.csv", rows=1,
+                  columns=[ColumnInfo(name="x", type="float"), ColumnInfo(name="name", type="text"),
+                           ColumnInfo(name="dept", type="text")])
+    for sql in ["WITH it AS (SELECT * FROM t WHERE dept='IT') SELECT name FROM it",
+                "SELECT CAST(x AS INTEGER) AS xi FROM t"]:
+        res = parse_code(sql, "sql", [t])
+        assert not res.ok and any("isn't a block yet" in d.message for d in res.diagnostics), sql

@@ -246,7 +246,12 @@ class _RGen:
         for j in plan.joins:
             fn = "left_join" if j.field("how") == "left" else "inner_join"
             right = r_name(j.field("table"), j.id)
-            verbs.append((f"{fn}({right}, by = {py_str(str(j.field('on')))})", j.id))
+            key = str(j.field("on"))
+            info = self.tables.get(j.field("table"))
+            col = info.column(key) if info else None
+            # dplyr matches NA keys by default; SQL never does, so turn that off for an empty key
+            na = ', na_matches = "never"' if col is not None and col.empty > 0 else ""
+            verbs.append((f"{fn}({right}, by = {py_str(key)}{na})", j.id))
         for d in plan.derives:
             verbs.append((f"mutate({r_ident(d.field('name'))} = {e(d.inputs.get('expr'))})", d.id))
         for w in plan.wheres:
