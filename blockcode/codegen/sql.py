@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from blockcode.codegen.emitter import Emitter, Generated
-from blockcode.codegen.expr import ATOM, ExprError, SqlRenderer, sql_ident
+from blockcode.codegen.expr import ATOM, ExprError, SqlRenderer, sql_ident, whole
 from blockcode.diagnostics import Diagnostic, error
 from blockcode.ir import Block, Program, TableInfo
 from blockcode.plan import Plan, build_plan, nullable
@@ -41,7 +41,9 @@ def generate_sql(program: Program, tables: dict[str, TableInfo]) -> Generated:
 
 
 def agg_sql(a: dict, render) -> str:
-    func = SQL_AGG.get(a.get("func"), str(a.get("func")).upper())
+    func = SQL_AGG.get(a.get("func"))
+    if func is None:  # the plan has already said why
+        raise ExprError("Pick a summary: count, sum, avg, min or max.")
     column = a.get("column")
     if not column:
         return f"{func}(*)"
@@ -73,7 +75,8 @@ def emit_select(em: Emitter, plan: Plan) -> None:
             text = f"{pre(d.inputs.get('expr'))} AS {sql_ident(key)}" if d else sql_ident(key)
             items.append((text, [group.id] + ([d.id] if d else [])))
         for a in group.field("aggs", []):
-            items.append((f"{agg_sql(a, col_pre)} AS {sql_ident(a.get('as', ''))}", [group.id]))
+            items.append((f"{agg_sql(a, col_pre)} AS {sql_ident(a.get('as') or '')}",
+                          [group.id]))
         if plan.select:
             keep = plan.select.field("columns", [])
             names = list(group.field("by", [])) + [a.get("as") for a in group.field("aggs", [])]
@@ -137,8 +140,9 @@ def emit_select(em: Emitter, plan: Plan) -> None:
             else:
                 parts.append(sql_ident(c))
         em.emit("ORDER BY " + ", ".join(parts), plan.order.id)
-    if plan.limit:
-        em.emit(f"LIMIT {plan.limit.field('n')}", plan.limit.id)
+    # a LIMIT that isn't a whole number is reported by the plan and left out of the code
+    if plan.limit and whole(plan.limit.field("n")) is not None:
+        em.emit(f"LIMIT {whole(plan.limit.field('n'))}", plan.limit.id)
     # close the statement
     text, blocks = em._lines[-1]
     em._lines[-1] = (text + ";", blocks)

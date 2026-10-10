@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from blockcode.codegen.expr import whole
 from blockcode.diagnostics import Diagnostic, error, warning
 from blockcode.ir import Block, TableInfo
 from blockcode.registry import SPECS, STEP_ORDER
@@ -232,8 +233,7 @@ def build_plan(src: Block, tables: dict[str, TableInfo]) -> Plan:
                     diags.append(error(f'"{k.get("column")}" is not a column here.', b.id))
             plan.order = b
         elif b.type == "limit":
-            n = b.field("n")
-            if not isinstance(n, int) or isinstance(n, bool) or n < 0:
+            if whole(b.field("n")) is None:
                 diags.append(error("LIMIT needs a whole number of rows.", b.id))
             plan.limit = b
 

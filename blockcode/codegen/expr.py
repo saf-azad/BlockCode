@@ -24,8 +24,62 @@ class ExprError(ValueError):
         self.block_id = block_id
 
 
+def _escape_char(ch: str) -> str:
+    if ch == "\n":
+        return "\\n"
+    if ch == "\t":
+        return "\\t"
+    # every other control character, and the Unicode line breaks, as a \u escape that
+    # Python, R and YAML all read back the same, so a string never spans lines
+    if ord(ch) < 32 or ord(ch) == 127 or ch in "\u0085  ":
+        return f"\\u{ord(ch):04x}"
+    return ch
+
+
+_NEEDS_ESCAPE = re.compile(r"[\x00-\x1f\x7f\u0085  ]")
+
+
 def py_str(s: str) -> str:
-    return '"' + s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n") + '"'
+    s = s.replace("\\", "\\\\").replace('"', '\\"')
+    return '"' + _NEEDS_ESCAPE.sub(lambda m: _escape_char(m.group()), s) + '"'
+
+
+def one_line(text: str) -> str:
+    """Text for a code comment: always a single line."""
+    return " ".join(str(text).split())
+
+
+_PY_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+PY_TAKEN = {"pd", "plt", "np"}  # the generated Python already uses these
+
+
+def name_problem(name) -> str | None:
+    """Why ``name`` can't be a variable in the generated Python, or None if it can.
+
+    Table, result, Set var and loop names are written into the code as they are, so they
+    must be plain identifiers."""
+    if isinstance(name, str) and _PY_NAME.match(name) and not keyword.iskeyword(name) \
+            and name not in PY_TAKEN:
+        return None
+    shown = one_line(str(name))[:40]
+    return (f'"{shown}" can\'t be a name in Python. Pick another one that starts with a letter '
+            f"and isn't a Python word like for or class.")
+
+
+def checked_name(name, block_id: str | None = None) -> str:
+    problem = name_problem(name)
+    if problem:
+        raise ExprError(problem, block_id)
+    return name
+
+
+def whole(value) -> int | None:
+    """A count written into the code (LIMIT, bins) as a plain int, or None if it isn't one."""
+    if isinstance(value, float) and value.is_integer():
+        value = int(value)
+    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+        return value
+    return None
 
 
 def py_lit(v) -> str:
@@ -138,8 +192,14 @@ class Renderer:
         a, b = self.sub(e, "a"), self.sub(e, "b")
         return f"{_wrap(a, p + 1)} {self.ops[op]} {_wrap(b, p + 1)}", p
 
-    def r_logic(self, e: Block) -> tuple[str, int]:
+    def logic_op(self, e: Block) -> str:
         op = e.field("op")
+        if op not in self.words:
+            raise ExprError('Pick "and" or "or".', e.id)
+        return op
+
+    def r_logic(self, e: Block) -> tuple[str, int]:
+        op = self.logic_op(e)
         p = self.prec[op]
         a, b = self.sub(e, "a"), self.sub(e, "b")
         return f"{_wrap(a, p)} {self.words[op]} {_wrap(b, p)}", p
@@ -232,7 +292,7 @@ class PandasRenderer(Renderer):
 
     def r_logic(self, e):
         # & and | bind tighter than comparisons in Python, so comparisons always get brackets.
-        op = e.field("op")
+        op = self.logic_op(e)
         p = self.prec[op]
         a, b = self.sub(e, "a"), self.sub(e, "b")
         return f"{_wrap(a, p)} {self.words[op]} {_wrap(b, p)}", p
@@ -307,13 +367,19 @@ class PyRenderer(Renderer):
         return py_lit(e.field("value")), ATOM
 
     def r_var(self, e):
-        return e.field("name"), ATOM
+        return checked_name(e.field("name"), e.id), ATOM
 
     def r_field(self, e):
-        return f"{e.field('var')}.{e.field('name')}", ATOM
+        name = e.field("name")
+        if not isinstance(name, str) or not name.isidentifier() or keyword.iskeyword(name):
+            raise ExprError(f'"{one_line(str(name))[:40]}" can\'t be read as a row field in '
+                            f"Python. Rename the column so it starts with a letter and has no "
+                            f"spaces.", e.id)
+        return f"{checked_name(e.field('var'), e.id)}.{name}", ATOM
 
     def r_col(self, e):
-        raise ExprError(f'Use a row field like row.{e.field("name")} here, not a column.', e.id)
+        raise ExprError(f'Use a row field like row.{one_line(str(e.field("name")))[:40]} here, '
+                        f"not a column.", e.id)
 
     def r_not(self, e):
         return f"not {_wrap(self.sub(e, 'a'), self.prec['not'])}", self.prec["not"]

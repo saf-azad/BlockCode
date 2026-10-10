@@ -5,8 +5,10 @@ Pipelines are one ``|>`` chain with one verb per block, so each line maps back t
 
 from __future__ import annotations
 
+import re
+
 from blockcode.codegen.emitter import Emitter, Generated
-from blockcode.codegen.expr import ExprError, RRenderer, py_str, r_ident
+from blockcode.codegen.expr import ExprError, RRenderer, one_line, py_str, r_ident, whole
 from blockcode.diagnostics import Diagnostic, error
 from blockcode.ir import Block, Program, TableInfo
 from blockcode.plan import Plan, build_plan
@@ -29,8 +31,15 @@ def _agg_r(a: dict) -> str:
         "sum": f"sum({c}, na.rm = TRUE)",
         "min": f"min({c}, na.rm = TRUE)",
         "max": f"max({c}, na.rm = TRUE)",
-    }.get(func, f"{func}({c})")
-    return f"{r_ident(a.get('as', ''))} = {expr}"
+    }.get(func)
+    if expr is None:  # the plan has already said why
+        raise ExprError("Pick a summary: count, sum, avg, min or max.")
+    return f"{r_ident(a.get('as') or '')} = {expr}"
+
+
+def chunk_label(name: str) -> str:
+    """A Quarto chunk label: letters, digits and dashes only."""
+    return re.sub(r"[^A-Za-z0-9-]+", "-", name).strip("-") or "out"
 
 
 class _RGen:
@@ -112,7 +121,7 @@ class _RGen:
         if self.quarto:
             em.emit("```{r}")
             if first.type == "from":
-                em.emit(f"#| label: {first.field('name') or 'out'}".replace("_", "-"))
+                em.emit(f"#| label: {chunk_label(first.field('name') or 'out')}")
             elif first.type == "plot":
                 self.fig += 1
                 em.emit(f"#| label: fig-{self.fig}", first.id)
@@ -135,7 +144,7 @@ class _RGen:
                 self.stmt(b)
             except ExprError as exc:
                 self.diags.append(error(str(exc), exc.block_id or b.id, target="r"))
-                self.em.emit(f"# {b.type}: {exc}", b.id)
+                self.em.emit(f"# {one_line(f'{b.type}: {exc}')}", b.id)
 
     def body(self, b: Block, name: str) -> None:
         self.em.depth += 1
@@ -204,11 +213,14 @@ class _RGen:
         if not x:
             raise ExprError("Pick a column for the plot.", b.id)
         if chart == "hist":
+            bins = whole(b.field("bins") or 5)
+            if not bins:
+                raise ExprError("The number of bins needs to be a whole number.", b.id)
             self.em.emit(f"ggplot({data}, aes(x = {r_ident(x)})) +", b.id)
-            self.em.emit(f"  geom_histogram(bins = {int(b.field('bins') or 5)})", b.id)
+            self.em.emit(f"  geom_histogram(bins = {bins})", b.id)
             return
         if chart not in GEOMS:
-            raise ExprError(f'"{chart}" is not a chart type.', b.id)
+            raise ExprError("Pick a chart type: bar, line, scatter or hist.", b.id)
         if not y:
             raise ExprError("Pick a column for the y axis.", b.id)
         self.em.emit(f"ggplot({data}, aes(x = {r_ident(x)}, y = {r_ident(y)})) +", b.id)
@@ -251,8 +263,9 @@ class _RGen:
             keys = [f"desc({r_ident(k['column'])})" if k.get("desc") else r_ident(k["column"])
                     for k in plan.order.field("keys", [])]
             verbs.append((f"arrange({', '.join(keys)})", plan.order.id))
-        if plan.limit:
-            verbs.append((f"slice_head(n = {plan.limit.field('n')})", plan.limit.id))
+        # a LIMIT that isn't a whole number is reported by the plan and left out of the code
+        if plan.limit and whole(plan.limit.field("n")) is not None:
+            verbs.append((f"slice_head(n = {whole(plan.limit.field('n'))})", plan.limit.id))
 
         head = f"{r_ident(plan.name)} <- {r_ident(plan.table)}"
         if not verbs:

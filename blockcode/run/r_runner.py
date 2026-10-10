@@ -134,6 +134,8 @@ def run_r(gen: Generated, project_dir: Path, names: list[str],
                                 "export it to run in RStudio.")
         return result
     code, nums = strip_quarto(gen)
+    # result names name the files the harness writes, so only plain R names are passed on
+    names = [n for n in names if re.fullmatch(r"[A-Za-z.][A-Za-z0-9._]*", n)]
     with tempfile.TemporaryDirectory(prefix="blockcode-r-") as tmp:
         tmpd = Path(tmp)
         (tmpd / "program.R").write_text(code, encoding="utf-8")
