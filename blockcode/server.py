@@ -12,6 +12,7 @@ from __future__ import annotations
 import io
 import json
 import logging
+import os
 import re
 import sqlite3
 import zipfile
@@ -32,6 +33,7 @@ from blockcode.codegen import TARGETS, generate
 from blockcode.data_io import CsvError, add_table, table_name_for
 from blockcode.ir import Program, TableInfo
 from blockcode.registry import SPECS, STEP_ORDER
+from blockcode.run import RunError, RunResult
 
 ROOT = Path(__file__).resolve().parent.parent
 # The built web app: web/dist locally, public/ when the Vercel build puts it there.
@@ -41,7 +43,32 @@ MAX_TABLES = 30
 TOO_BIG = f"That file is too big ({MAX_FILE // (1024 * 1024)} MB max)."
 OOPS = ("Something went wrong inside BlockCode with these blocks. Undo your last change, or "
         "remove the block you just edited, and try again.")
+# A "Code" (raw) block holds free-typed Python or R that runs on the server exactly as written.
+# On a shared, public deployment that lets anyone run arbitrary code, so running it is off unless
+# the operator opts in with BLOCKCODE_ALLOW_RAW_CODE on a trusted or sandboxed host. Showing and
+# exporting code are never affected, and programs built only from blocks always run.
+RAW_OFF = ("Running free-typed code is turned off on this server, so a program with a Code block "
+           "can't be run here. The blocks around it still run, and you can still show and export "
+           "the code. Rebuild the Code block as blocks to run it.")
+_TRUTHY = {"1", "true", "yes", "on"}
 log = logging.getLogger("blockcode")
+
+
+def raw_code_allowed() -> bool:
+    return os.environ.get("BLOCKCODE_ALLOW_RAW_CODE", "").strip().lower() in _TRUTHY
+
+
+def raw_run_refusal(program: Program, target: str) -> dict | None:
+    """When free-typed code is off, refuse to run a program that contains a Code block,
+    pointing at the first one so the editor can highlight it. Returns ``None`` otherwise."""
+    if raw_code_allowed():
+        return None
+    first = next((b for b in program.walk() if b.type == "raw"), None)
+    if first is None:
+        return None
+    return RunResult(target=target, ok=False,
+                     error=RunError(kind="RawCodeBlocked", message=RAW_OFF,
+                                    block_id=first.id)).model_dump()
 
 
 class GenerateIn(BaseModel):
@@ -206,6 +233,9 @@ def create_app() -> FastAPI:
         from blockcode.engine import run_in
 
         body = parse_run(request)
+        refusal = raw_run_refusal(body.program, body.target)
+        if refusal is not None:
+            return refusal
         data = await read_files(files)
 
         def work() -> dict:

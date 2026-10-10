@@ -145,7 +145,31 @@ def test_run_maps_error_to_block():
     assert "best is used before it has a value" in r["error"]["message"]
 
 
-def test_runaway_output_is_cut_off():
+def test_raw_code_is_refused_unless_opted_in(monkeypatch):
+    # Free-typed ("Code") blocks run arbitrary Python/R on the server, so by default /api/run
+    # refuses any program that contains one, pointing at the block. Block-only programs still run,
+    # and showing/exporting code is never affected.
+    monkeypatch.delenv("BLOCKCODE_ALLOW_RAW_CODE", raising=False)
+    c = client()
+    raw = b.program(b.raw("python", "print('hi')\n"))
+    r = run(c, raw, "python", files=[]).json()
+    assert r["ok"] is False and r["error"]["kind"] == "RawCodeBlocked"
+    assert r["error"]["block_id"] == raw.blocks[0].id
+
+    blocks_only = b.program(b.from_("students", b.limit(3)))
+    assert run(c, blocks_only, "sql").json()["ok"] is True
+
+    # Showing and exporting the raw code keep working even when running it is off.
+    gen = c.post("/api/generate-all",
+                 json={"program": raw.model_dump(), "tables": []})
+    assert gen.status_code == 200 and "print('hi')" in gen.json()["python"]["code"]
+    exp = c.post("/api/export", data={"request": json.dumps(
+        {"program": raw.model_dump(), "target": "python", "title": "x"})}, files=[])
+    assert exp.status_code == 200
+
+
+def test_runaway_output_is_cut_off(monkeypatch):
+    monkeypatch.setenv("BLOCKCODE_ALLOW_RAW_CODE", "1")
     c = client()
     prog = b.program(b.raw("python", "while True:\n    print('x' * 1000)\n"))
     r = run(c, prog, "python", files=[]).json()
@@ -155,6 +179,7 @@ def test_runaway_output_is_cut_off():
 
 
 def test_learner_code_cannot_read_server_secrets(monkeypatch):
+    monkeypatch.setenv("BLOCKCODE_ALLOW_RAW_CODE", "1")
     monkeypatch.setenv("BLOCKCODE_TEST_SECRET", "hunter2")
     c = client()
     prog = b.program(b.raw("python", "import os\nprint(os.environ.get('BLOCKCODE_TEST_SECRET'))\n"))

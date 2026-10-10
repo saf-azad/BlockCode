@@ -25,5 +25,8 @@ COPY --from=web /web/dist ./web/dist
 # Learners' code runs as this user, which can't change the app's files.
 RUN useradd --create-home blockcode
 USER blockcode
+# Running free-typed "Code" blocks (arbitrary Python/R) is off by default, like everywhere else,
+# so a public container is safe. On a trusted or otherwise sandboxed host, turn it back on with:
+#   docker run -e BLOCKCODE_ALLOW_RAW_CODE=1 -p 8000:8000 blockcode
 EXPOSE 8000
 CMD ["sh", "-c", "exec /app/.venv/bin/uvicorn blockcode.server:app --host 0.0.0.0 --port ${PORT:-8000}"]
