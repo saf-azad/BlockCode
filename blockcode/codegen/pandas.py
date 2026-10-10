@@ -104,4 +104,8 @@ def pd_agg(a: dict) -> str:
 def whole_agg(a: dict, out: str) -> str:
     if a.get("func") == "count" and not a.get("column"):
         return f"len({out})"
-    return f"{out}[{py_str(a.get('column') or '')}].{pd_agg(a)}()"
+    col = f"{out}[{py_str(a.get('column') or '')}]"
+    if a.get("func") == "sum":
+        # sum of no values is 0 in pandas but NULL in SQL; min_count=1 makes it NaN to match
+        return f"{col}.sum(min_count=1)"
+    return f"{col}.{pd_agg(a)}()"

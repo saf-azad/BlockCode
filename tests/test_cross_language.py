@@ -146,3 +146,61 @@ def test_huge_cell_and_lone_cr_do_not_crash(tmp_path):
     cr = b"city,n\rParis,1\rLyon,2\r"
     info2, _ = add_table(tmp_path, db, "cr.csv", cr, name="cr")
     assert info2.rows == 2 and [c.name for c in info2.columns] == ["city", "n"]
+
+
+def errors_for(prog, tables=()):
+    from blockcode.validate import validate
+    tdict = {t.name: t for t in tables}
+    out = set()
+    for tgt in ("sql", "python", "r"):
+        out |= {d.message for d in validate(prog, tdict, tgt) if d.severity == "error"}
+    return out
+
+
+PETS_T = None
+
+
+def _pets_table():
+    import sqlite3 as s3
+    import tempfile as tf
+    from blockcode.data_io import add_table
+    d = Path(tf.mkdtemp()); db = d / "db.sqlite"; s3.connect(db).close()
+    info, _ = add_table(d, db, "pets.csv", b"name,age\nRex,3\nTom,5\n", name="pets")
+    return info
+
+
+def test_type_mistakes_become_clear_problems():
+    t = _pets_table()
+    bad = {
+        "text vs num": b.program(b.from_("pets", b.where(b.cmp(">", b.col("name"), b.lit(5))))),
+        "num box empty": b.program(b.from_("pets", b.where(b.cmp(">", b.col("age"), b.lit(""))))),
+        "bare column": b.program(b.from_("pets", b.where(b.col("age")))),
+        "maths as filter": b.program(b.from_("pets", b.where(b.math("+", b.col("age"), b.lit(1))))),
+        "sum of text": b.program(b.from_("pets", b.group(["age"], b.agg("sum", "name", "s")))),
+        "maths on text": b.program(b.from_("pets", b.derive("d", b.math("+", b.col("name"), b.lit(1))))),
+    }
+    for label, prog in bad.items():
+        assert errors_for(prog, [t]), label
+
+
+def test_valid_programs_are_not_flagged():
+    t = _pets_table()
+    ok = {
+        "age > 5": b.program(b.from_("pets", b.where(b.cmp(">", b.col("age"), b.lit(5))))),
+        "name = Rex": b.program(b.from_("pets", b.where(b.cmp("=", b.col("name"), b.lit("Rex"))))),
+        "min of text": b.program(b.from_("pets", b.group(["age"], b.agg("min", "name", "m")))),
+        "derive age*2": b.program(b.from_("pets", b.derive("d", b.math("*", b.col("age"), b.lit(2))))),
+        "contains": b.program(b.from_("pets", b.where(b.text("contains", b.col("name"), "a")))),
+    }
+    for label, prog in ok.items():
+        assert not errors_for(prog, [t]), (label, errors_for(prog, [t]))
+
+
+def test_sum_over_empty_group_is_null_not_zero(tmp_path):
+    # SQL and pandas agree: summing no rows is NULL, not 0 (pandas min_count=1)
+    d, db, tables = workspace(tmp_path, "e", b"sid,grade\n1,50\n2,60\n")
+    prog = b.program(b.from_("e", b.where(b.cmp("=", b.col("sid"), b.lit(0))),
+                             b.group([], b.agg("count", None, "n"), b.agg("sum", "sid", "s"))))
+    for tgt in ("sql", "python"):
+        r = run_in(tmp_path, db, tables, prog, tgt)
+        assert r.ok and r.tables[0].rows[0][1] is None, (tgt, r.tables[0].rows)
