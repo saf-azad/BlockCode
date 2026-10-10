@@ -49,9 +49,12 @@ class Normalized(BaseModel):
     notes: list[str] = Field(default_factory=list)  # what we changed, in plain words
 
 
+MAX_NAME = 60  # table names become variables and file names: keep them readable
+
+
 def table_name_for(filename: str) -> str:
     stem = Path(filename).stem.lower()
-    name = re.sub(r"[^a-z0-9_]+", "_", stem).strip("_") or "table"
+    name = re.sub(r"[^a-z0-9_]+", "_", stem).strip("_")[:MAX_NAME].rstrip("_") or "table"
     if name[0].isdigit():
         name = "t_" + name
     if name in TAKEN_NAMES:
@@ -104,7 +107,8 @@ def _clean_headers(header: list[str], notes: list[str]) -> list[str]:
     seen: set[str] = set()
     blank = renamed = 0
     for i, raw in enumerate(header):
-        name = re.sub(r"\s+", " ", raw).strip()
+        # control characters can't be typed or shown, so they go; runs of spaces become one
+        name = re.sub(r"\s+", " ", re.sub(r"[\x00-\x08\x0e-\x1f\x7f]", "", raw)).strip()
         if not name:
             name = f"column_{i + 1}"
             blank += 1

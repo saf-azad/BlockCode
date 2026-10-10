@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 
 from blockcode.codegen.emitter import Emitter, Generated
-from blockcode.codegen.expr import ExprError, RRenderer, one_line, py_str, r_ident, whole
+from blockcode.codegen.expr import ExprError, RRenderer, one_line, py_str, r_ident, r_name, whole
 from blockcode.diagnostics import Diagnostic, error
 from blockcode.ir import Block, Program, TableInfo
 from blockcode.plan import Plan, build_plan
@@ -108,8 +108,12 @@ class _RGen:
             loaded.add(table)
             info = self.tables.get(table)
             path = info.file if info else f"data/{table}.csv"
-            self.em.emit(f"{r_ident(table)} <- read_csv({py_str(path)}, show_col_types = FALSE)",
-                         b.id)
+            try:
+                line = f"{r_name(table, b.id)} <- read_csv({py_str(path)}, show_col_types = FALSE)"
+            except ExprError as exc:
+                self.diags.append(error(str(exc), b.id, target="r"))
+                continue
+            self.em.emit(line, b.id)
 
     def flush(self, chunk: list[Block]) -> None:
         if chunk:
@@ -156,9 +160,9 @@ class _RGen:
         if t == "from":
             self.pipeline(self.plans.get(b.id) or build_plan(b, self.tables))
         elif t == "setvar":
-            em.emit(f"{r_ident(b.field('name'))} <- {e(b.inputs.get('value'))}", b.id)
+            em.emit(f"{r_name(b.field('name'), b.id)} <- {e(b.inputs.get('value'))}", b.id)
         elif t == "changevar":
-            name = r_ident(b.field("name"))
+            name = r_name(b.field("name"), b.id)
             em.emit(f"{name} <- {name} + {e(b.inputs.get('by'))}", b.id)
         elif t == "print":
             from blockcode.codegen.python import print_args
@@ -168,9 +172,9 @@ class _RGen:
             em.emit(f"print({inner})", b.id)
         elif t == "foreach":
             over = b.inputs.get("over")
-            var = r_ident(b.field("var") or "row")
+            var = r_name(b.field("var") or "row", b.id)
             if over is not None and over.type == "var":
-                data = r_ident(over.field("name"))
+                data = r_name(over.field("name"), b.id)
                 em.emit(f"for (i in seq_len(nrow({data}))) {{", b.id)
                 em.depth += 1
                 em.emit(f"{var} <- {data}[i, ]", b.id)
@@ -180,8 +184,8 @@ class _RGen:
             self.body(b, "body")
             em.emit("}", b.id)
         elif t == "repeat":
-            em.emit(f"for ({r_ident(b.field('var') or 'i')} in seq_len({e(b.inputs.get('times'))})"
-                    f" - 1) {{", b.id)
+            var = r_name(b.field("var") or "i", b.id)
+            em.emit(f"for ({var} in seq_len({e(b.inputs.get('times'))}) - 1) {{", b.id)
             self.body(b, "body")
             em.emit("}", b.id)
         elif t == "if":
@@ -208,7 +212,7 @@ class _RGen:
             raise ExprError(f'"{t}" can\'t be used as a step on its own.', b.id)
 
     def plot(self, b: Block) -> None:
-        chart, data = b.field("chart", "bar"), r_ident(b.field("data") or "out")
+        chart, data = b.field("chart", "bar"), r_name(b.field("data") or "out", b.id)
         x, y = b.field("x"), b.field("y")
         if not x:
             raise ExprError("Pick a column for the plot.", b.id)
@@ -233,7 +237,8 @@ class _RGen:
         verbs: list[tuple[str, str]] = []
         for j in plan.joins:
             fn = "left_join" if j.field("how") == "left" else "inner_join"
-            verbs.append((f"{fn}({r_ident(j.field('table'))}, by = {py_str(j.field('on'))})", j.id))
+            right = r_name(j.field("table"), j.id)
+            verbs.append((f"{fn}({right}, by = {py_str(str(j.field('on')))})", j.id))
         for d in plan.derives:
             verbs.append((f"mutate({r_ident(d.field('name'))} = {e(d.inputs.get('expr'))})", d.id))
         for w in plan.wheres:
@@ -267,7 +272,7 @@ class _RGen:
         if plan.limit and whole(plan.limit.field("n")) is not None:
             verbs.append((f"slice_head(n = {whole(plan.limit.field('n'))})", plan.limit.id))
 
-        head = f"{r_ident(plan.name)} <- {r_ident(plan.table)}"
+        head = f"{r_name(plan.name, plan.block.id)} <- {r_name(plan.table, plan.block.id)}"
         if not verbs:
             self.em.emit(head, plan.block.id)
             return

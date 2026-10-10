@@ -148,10 +148,29 @@ _R_RESERVED = {"if", "else", "repeat", "while", "function", "for", "next", "brea
                "FALSE", "NULL", "Inf", "NaN", "NA", "in"}
 
 
+def _r_plain(name) -> bool:
+    return (isinstance(name, str) and bool(_R_IDENT.match(name)) and name not in _R_RESERVED
+            and not re.match(r"^\.\d", name))
+
+
 def r_ident(name: str) -> str:
-    if _R_IDENT.match(name) and name not in _R_RESERVED and not re.match(r"^\.\d", name):
+    """A column name in R: bare when it can be, otherwise in backticks. R reads escapes inside
+    backticks just as it does in strings, so backslashes are escaped first, then backticks and
+    control characters: the name can never end the quotes early."""
+    name = str(name)
+    if _r_plain(name):
         return name
-    return "`" + name.replace("`", "\\`") + "`"
+    s = name.replace("\\", "\\\\").replace("`", "\\`")
+    return "`" + _NEEDS_ESCAPE.sub(lambda m: _escape_char(m.group()), s) + "`"
+
+
+def r_name(name, block_id: str | None = None) -> str:
+    """A table, result, Set var or loop name in R: a plain R name, like the Python ones."""
+    if _r_plain(name):
+        return name
+    shown = one_line(str(name))[:40]
+    raise ExprError(f'"{shown}" can\'t be a name in R. Pick another one that starts with a '
+                    f"letter and has only letters, digits, dots and _.", block_id)
 
 
 def _wrap(part: tuple[str, int], need: int) -> str:
@@ -332,10 +351,10 @@ class RRenderer(Renderer):
         return r_lit(e.field("value")), ATOM
 
     def r_var(self, e):
-        return r_ident(e.field("name")), ATOM
+        return r_name(e.field("name"), e.id), ATOM
 
     def r_field(self, e):
-        return f"{r_ident(e.field('var'))}${r_ident(e.field('name'))}", ATOM
+        return f"{r_name(e.field('var'), e.id)}${r_ident(e.field('name'))}", ATOM
 
     def r_not(self, e):
         return f"!{_wrap(self.sub(e, 'a'), ATOM)}", self.prec["not"]

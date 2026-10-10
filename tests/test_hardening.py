@@ -176,3 +176,45 @@ def test_sql_counts_rows_it_does_not_return(ws):
     many = TableInfo(name="many", file="data/many.csv", rows=1000, columns=[ColumnInfo(name="k", type="int")])
     result = run_sql(generate(b.program(b.from_("many")), [many], "sql"), db, ["out"])
     assert result.ok and result.tables[0].total_rows == 1000 and len(result.tables[0].rows) == 200
+
+
+AWKWARD = ["two words", "back\\slash", "tick`", "back\\`tick", "line\nbreak", "100%", "é ü", "a\"b"]
+
+
+@pytest.mark.parametrize("name", AWKWARD)
+def test_r_quotes_any_column_name_exactly(name, tmp_path):
+    from blockcode.codegen.expr import r_ident
+    from blockcode.run.r_runner import rscript
+
+    if rscript() is None:
+        pytest.skip("R isn't installed")
+    import subprocess
+
+    script = tmp_path / "q.R"
+    # one statement that makes a column with this name, then a check that R kept it exactly
+    script.write_text(f"x <- data.frame(k = 1) |> transform({r_ident(name)} = 2, check.names = FALSE)\n"
+                      f"cat(identical(names(x)[2], {py_str(name)}), length(parse('{script}')))\n",
+                      encoding="utf-8")
+    out = subprocess.run([rscript(), "--vanilla", str(script)], capture_output=True, text=True, timeout=60)
+    assert out.stdout.strip() == "TRUE 2", (name, out.stdout, out.stderr)
+
+
+@pytest.mark.parametrize("name", [n for n in BAD_NAMES if n and n not in ("pd", "1st", "for")] + ["if", "a\\`b"])
+def test_bad_names_never_reach_r_as_code(name, ws):
+    d, db, tables = ws
+    for where, prog in bad_name_programs(name).items():
+        gen = generate(prog, tables, "r")
+        assert any(x.severity == "error" for x in gen.diagnostics), where
+        assert not run_in(d, db, tables, prog, "r").ok, where
+
+
+def test_long_and_odd_file_names_make_short_table_names(tmp_path):
+    from blockcode.data_io import table_name_for
+
+    assert len(table_name_for("x" * 300 + ".csv")) <= 60
+    db = tmp_path / "db.sqlite"
+    sqlite3.connect(db).close()
+    info, _ = add_table(tmp_path, db, "y" * 300 + ".csv", PETS)
+    assert info.name == "y" * 60
+    headers = add_table(tmp_path, db, "odd.csv", b"a\x01b,c\x7fd\n1,2\n")[0].columns
+    assert [c.name for c in headers] == ["ab", "cd"]
