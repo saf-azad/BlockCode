@@ -24,7 +24,7 @@ def generate(program: Program, tables: dict[str, TableInfo] | list[TableInfo], t
         return generate_sql(program, tables)
     if target == "python":
         from blockcode.codegen.python import generate_python
-        return generate_python(program, tables)
+        return generate_python(program, tables, **options)
     if target == "r":
         from blockcode.codegen.r import generate_r
         return generate_r(program, tables, **options)

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import keyword
 import re
+import unicodedata
 from typing import Callable
 
 from blockcode.ir import Block
@@ -93,9 +94,12 @@ def py_lit(v) -> str:
 
 
 def py_kwarg(name: str, value: str) -> str:
-    """``name=value`` in a call, or ``**{"name": value}`` when name isn't a Python identifier
-    (a column called "for" or "2nd")."""
-    if name.isidentifier() and not keyword.iskeyword(name):
+    """``name=value`` in a call, or ``**{"name": value}`` when name isn't a plain Python
+    identifier (a column called "for" or "2nd") or when Python would rewrite it. Python
+    normalises identifiers with NFKC, so a column "avg_Ｎｏ" written as ``avg_Ｎｏ=...`` would
+    silently become the column "avg_No"; the ``**{...}`` form keeps the name exactly."""
+    if (name.isidentifier() and not keyword.iskeyword(name)
+            and unicodedata.normalize("NFKC", name) == name):
         return f"{name}={value}"
     return f"**{{{py_str(name)}: {value}}}"
 
@@ -262,11 +266,15 @@ class SqlRenderer(Renderer):
         return f"{_wrap(self.sub(e, 'a'), 5)} IN ({vals})", self.prec["cmp"]
 
     def r_text(self, e):
-        v = str(e.field("value", ""))
+        # the search text is data, so its own % and _ (and the \\ escape) are escaped and a
+        # LIKE wildcard is added around it; without this, searching for "50%" or "a_b" would
+        # treat those as wildcards and match far too much
+        raw = str(e.field("value", ""))
+        v = raw.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         pat = {"contains": f"%{v}%", "starts": f"{v}%", "ends": f"%{v}"}.get(e.field("op"))
         if pat is None:
             raise ExprError(f'"{e.field("op")}" is not a text test.', e.id)
-        return f"{_wrap(self.sub(e, 'a'), 5)} LIKE {sql_str(pat)}", self.prec["cmp"]
+        return f"{_wrap(self.sub(e, 'a'), 5)} LIKE {sql_str(pat)} ESCAPE '\\'", self.prec["cmp"]
 
     def _is_int(self, e: Block | None) -> bool:
         if e is None:
@@ -290,6 +298,15 @@ class SqlRenderer(Renderer):
                 if b is not None and b.type == "lit":
                     return f"{_wrap(self.sub(e, 'a'), p)} / {float(b.field('value'))!r}", p
                 return f"CAST({self.sub(e, 'a')[0]} AS REAL) / {_wrap(self.sub(e, 'b'), p + 1)}", p
+        if e.field("op") == "%":
+            # SQLite's % truncates toward zero and only does whole numbers (-7 % 3 = -1,
+            # 2.5 % 2 = 0). pandas and R floor instead (-7 %% 3 = 2, 2.5 %% 2 = 0.5), so build
+            # the floored remainder: whole numbers stay whole, decimals use floor().
+            aw = _wrap(self.sub(e, "a"), 7)
+            bw = _wrap(self.sub(e, "b"), 7)
+            if self._is_int(e.inputs.get("a")) and self._is_int(e.inputs.get("b")):
+                return f"(({aw} % {bw}) + {bw}) % {bw}", self.prec["%"]
+            return f"{aw} - {bw} * floor({aw} * 1.0 / {bw})", self.prec["-"]
         return super().r_math(e)
 
 

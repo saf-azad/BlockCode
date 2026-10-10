@@ -37,6 +37,8 @@ class Plan:
     select: Block | None = None
     order: Block | None = None
     limit: Block | None = None
+    # column names from the source and joins, before any new column is added
+    source_cols: list[str] = field(default_factory=list)
     # columns visible to Where/Derive (before grouping) and after the whole pipeline
     pre_group: dict[str, Col] = field(default_factory=dict)
     post_group: dict[str, Col] = field(default_factory=dict)
@@ -182,6 +184,8 @@ def build_plan(src: Block, tables: dict[str, TableInfo]) -> Plan:
             check(b.inputs.get("cond"), cols, b, "here")
             plan.wheres.append(b)
         elif b.type == "derive":
+            if not plan.source_cols:
+                plan.source_cols = list(cols)
             name = b.field("name")
             if not name:
                 diags.append(error("Give the new column a name.", b.id))
@@ -237,6 +241,8 @@ def build_plan(src: Block, tables: dict[str, TableInfo]) -> Plan:
                 diags.append(error("LIMIT needs a whole number of rows.", b.id))
             plan.limit = b
 
+    if not plan.source_cols:
+        plan.source_cols = list(cols)
     if not pre_group_set:
         plan.pre_group = dict(cols)
     used = None

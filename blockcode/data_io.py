@@ -23,6 +23,9 @@ from blockcode.ir import ColumnInfo, TableInfo
 
 SQL_TYPES = {"int": "INTEGER", "float": "REAL", "bool": "INTEGER", "text": "TEXT"}
 INT64_MAX = 2**63 - 1
+# one uploaded file is at most ~10 MB, so a single field can't be larger; raise the default
+# 128 KB limit so a long text cell is read as one value instead of crashing the CSV reader
+csv.field_size_limit(16 * 1024 * 1024)
 
 # pandas' default "empty" spellings. readr only knows "" and "NA", so everything here is
 # rewritten as "" and all three languages agree on which values are empty.
@@ -31,8 +34,12 @@ NA_TOKENS = {"", "#N/A", "#N/A N/A", "#NA", "-1.#IND", "-1.#QNAN", "-NaN", "-nan
 DELIMITERS = [",", ";", "\t", "|"]
 # Table names become Python variables, so they can't be keywords or shadow what the
 # generated code uses.
-TAKEN_NAMES = set(keyword.kwlist) | {"pd", "plt", "np", "print", "len", "range", "round", "str",
-                                     "int", "float", "sum", "min", "max", "abs", "list", "type"}
+# R's reserved words, so an uploaded table named "function" or "next" still runs in R
+R_RESERVED = {"if", "else", "repeat", "while", "function", "for", "next", "break", "true",
+              "false", "null", "inf", "nan", "na", "in", "t", "f"}
+TAKEN_NAMES = (set(keyword.kwlist) | R_RESERVED
+               | {"pd", "plt", "np", "print", "len", "range", "round", "str",
+                  "int", "float", "sum", "min", "max", "abs", "list", "type"})
 
 _PLAIN_NUM = re.compile(r"^[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$")
 _THOUSANDS = re.compile(r"^[-+]?\d{1,3}(,\d{3})+(\.\d+)?$")
@@ -158,6 +165,9 @@ def normalize_csv(content: bytes) -> Normalized:
     if not content.strip():
         raise CsvError("That file is empty.")
     text, encoding = _decode(content)
+    # old-Mac files use lone CRs and some Windows files use CRLF; make every line end in \n so
+    # the CSV reader doesn't see a stray newline inside a field
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
     if _looks_binary(text):
         raise CsvError("That file doesn't look like a CSV. Save your data as CSV (comma "
                        "separated values) and try again.")

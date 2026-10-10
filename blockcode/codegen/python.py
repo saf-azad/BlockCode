@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from blockcode.codegen.emitter import Emitter, Generated
-from blockcode.codegen.expr import ExprError, PyRenderer, checked_name, one_line, py_str, whole
+from blockcode.codegen.expr import (ExprError, PyRenderer, checked_name, name_problem,
+                                    one_line, py_str, whole)
 from blockcode.codegen.pandas import emit_pipeline
 from blockcode.diagnostics import Diagnostic, error
 from blockcode.ir import Block, Program, TableInfo
@@ -12,7 +13,10 @@ from blockcode.plan import build_plan
 PLOT_KINDS = ("bar", "line", "scatter", "hist")
 
 
-def generate_python(program: Program, tables: dict[str, TableInfo]) -> Generated:
+def generate_python(program: Program, tables: dict[str, TableInfo],
+                    show_results: bool = False) -> Generated:
+    """``show_results`` adds a print of each result table at the end, so an exported .py run on
+    its own shows the same tables the editor does (the R export already prints its bare result)."""
     gen = _PyGen(tables)
     em = gen.em
     em.emit("import pandas as pd")
@@ -21,6 +25,18 @@ def generate_python(program: Program, tables: dict[str, TableInfo]) -> Generated
         em.emit("import matplotlib.pyplot as plt", *plots)
     em.blank()
     gen.stmts(program.blocks)
+    if show_results:
+        names, seen = [], set()
+        for top in program.blocks:
+            if top.type == "from":
+                name = top.field("name") or "out"
+                if name not in seen and name_problem(name) is None:
+                    seen.add(name)
+                    names.append((name, top.id))
+        if names:
+            em.blank()
+            for name, bid in names:
+                em.emit(f"print({name})", bid)
     return em.result("python", gen.diags)
 
 

@@ -53,11 +53,13 @@ def emit_pipeline(em: Emitter, plan: Plan, tables: dict[str, TableInfo], loaded:
         if len(keys) == 1:
             k = keys[0]
             asc = ", ascending=False" if k.get("desc") else ""
-            em.emit(f"{out} = {out}.sort_values({py_str(k['column'])}{asc})", plan.order.id)
+            em.emit(f"{out} = {out}.sort_values({py_str(k['column'])}{asc}, "
+                    f'kind="stable")', plan.order.id)
         else:
             cols = ", ".join(py_str(k["column"]) for k in keys)
             ascs = ", ".join("False" if k.get("desc") else "True" for k in keys)
-            em.emit(f"{out} = {out}.sort_values([{cols}], ascending=[{ascs}])", plan.order.id)
+            em.emit(f"{out} = {out}.sort_values([{cols}], ascending=[{ascs}], "
+                    f'kind="stable")', plan.order.id)
     # a LIMIT that isn't a whole number is reported by the plan and left out of the code
     if plan.limit and whole(plan.limit.field("n")) is not None:
         em.emit(f"{out} = {out}.head({whole(plan.limit.field('n'))})", plan.limit.id)

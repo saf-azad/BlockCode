@@ -41,6 +41,10 @@ def strip_quarto(gen: Generated) -> tuple[str, list[int]]:
 
 
 HARNESS = r'''
+# Compare and sort text by byte value, the way SQLite and pandas do, so the three targets agree
+# on filters like name > "M", on min()/max() of text, and on arrange(); without this R would
+# use the machine's locale collation and could order text differently.
+invisible(suppressWarnings(Sys.setlocale("LC_COLLATE", "C")))
 .bc_args <- commandArgs(trailingOnly = TRUE)
 .bc_out <- .bc_args[1]; .bc_names <- strsplit(.bc_args[2], ",")[[1]]
 .bc_src <- .bc_args[3]
@@ -172,9 +176,14 @@ def run_r(gen: Generated, project_dir: Path, names: list[str],
                 kinds_file = tmpd / f"types_{n}.txt"
                 kinds = kinds_file.read_text().splitlines() if kinds_file.exists() else []
                 kind = lambda i: kinds[i] if i < len(kinds) else ""  # noqa: E731
+                header = rows[0] if rows else []
+                width = len(header)
+                # a one-column row that is a single empty value is a blank line, which
+                # csv.reader returns as [], so pad every short row back to the header width
                 result.tables.append(TableResult(
-                    name=n, columns=rows[0] if rows else [],
-                    rows=[[_cell(v, kind(i)) for i, v in enumerate(r)] for r in rows[1:]],
+                    name=n, columns=header,
+                    rows=[[_cell(v, kind(i)) for i, v in enumerate(r + [""] * (width - len(r)))]
+                          for r in rows[1:]],
                     total_rows=total))
         pngs = sorted(tmpd.glob("plot*.png"), key=lambda p: int(re.sub(r"\D", "", p.stem)))
         for png in pngs[:MAX_PLOTS]:

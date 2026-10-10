@@ -108,8 +108,16 @@ class _RGen:
             loaded.add(table)
             info = self.tables.get(table)
             path = info.file if info else f"data/{table}.csv"
+            # keep the column types found at upload: readr would otherwise re-guess and read
+            # text like "1,5", "14:30" or "2023-01-02" as a number, time or date, so the R
+            # result would differ from SQL and pandas. "c" forces text; "?" lets readr guess.
+            coltypes = ""
+            if info:
+                coltypes = "".join("c" if c.type == "text" else "?" for c in info.columns)
+            spec = f", col_types = {py_str(coltypes)}" if coltypes and set(coltypes) != {"?"} else ""
             try:
-                line = f"{r_name(table, b.id)} <- read_csv({py_str(path)}, show_col_types = FALSE)"
+                line = (f"{r_name(table, b.id)} <- read_csv({py_str(path)}, show_col_types = FALSE"
+                        f"{spec})")
             except ExprError as exc:
                 self.diags.append(error(str(exc), b.id, target="r"))
                 continue
