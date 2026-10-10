@@ -56,7 +56,11 @@ print.ggplot <- function(x, ...) {
                   height = 4, dpi = 110)
   invisible(x)
 }
-.bc_exprs <- parse(.bc_src, keep.source = TRUE)
+.bc_exprs <- tryCatch(parse(.bc_src, keep.source = TRUE), error = function(e) {
+  writeLines(c("1", "1", "", conditionMessage(e)), file.path(.bc_out, "error.txt"))
+  NULL
+})
+if (is.null(.bc_exprs)) quit(save = "no", status = 1)
 .bc_err <- NULL
 for (.bc_e in seq_along(.bc_exprs)) {
   .bc_line <- getSrcLocation(.bc_exprs[.bc_e], "line")

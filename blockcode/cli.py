@@ -34,13 +34,23 @@ def _load(store: ProjectStore, name: str, program_file: Path | None):
         typer.echo(str(exc), err=True)
         raise typer.Exit(1)
     if program_file:
+        from pydantic import ValidationError
+
         from blockcode.ir import Program, Project
 
-        text = program_file.read_text()
+        try:
+            text = program_file.read_text()
+        except OSError as exc:
+            typer.echo(f"Can't read {program_file}: {exc.strerror or exc}", err=True)
+            raise typer.Exit(1)
         try:
             project.program = Project.model_validate_json(text).program
-        except Exception:
-            project.program = Program.model_validate_json(text)
+        except ValidationError:
+            try:
+                project.program = Program.model_validate_json(text)
+            except ValidationError:
+                typer.echo(f"{program_file} isn't a BlockCode program or project file.", err=True)
+                raise typer.Exit(1)
     return project
 
 
@@ -68,7 +78,12 @@ def new(name: str, projects_dir: Path = PROJECTS,
 def import_csv(name: str, csv: Path, projects_dir: Path = PROJECTS) -> None:
     """Add a CSV to a project as a table."""
     try:
-        info = ProjectStore(projects_dir).add_csv(name, csv.name, csv.read_bytes())
+        content = csv.read_bytes()
+    except OSError as exc:
+        typer.echo(f"Can't read {csv}: {exc.strerror or exc}", err=True)
+        raise typer.Exit(1)
+    try:
+        info = ProjectStore(projects_dir).add_csv(name, csv.name, content)
     except ProjectError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(1)
@@ -86,7 +101,9 @@ def code(name: str, target: str = TARGET, projects_dir: Path = PROJECTS,
 
     store = ProjectStore(projects_dir)
     project = _load(store, name, program)
-    gen = generate(project.program, project.tables, _check_target(target))
+    tgt = _check_target(target)
+    opts = {"title": project.title or project.name} if tgt == "r" else {}
+    gen = generate(project.program, project.tables, tgt, **opts)
     typer.echo(gen.code, nl=False)
 
 
@@ -137,7 +154,11 @@ def export(name: str, target: str = TARGET, projects_dir: Path = PROJECTS,
 
     store = ProjectStore(projects_dir)
     project = _load(store, name, program)
-    files = export_project(store, project, _check_target(target), out)
+    try:
+        files = export_project(store, project, _check_target(target), out)
+    except ProjectError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1)
     for f in files:
         typer.echo(f"wrote {f}")
 
@@ -160,10 +181,16 @@ def version() -> None:
     typer.echo(__version__)
 
 
+def _cell(v) -> str:
+    # keep the full value, like the web app; only tidy a float that is really a whole number
+    if isinstance(v, float) and v.is_integer():
+        return str(int(v))
+    return str(v)
+
+
 def _format_table(t) -> str:
     cols = t.columns
-    rows = [["" if v is None else (f"{v:.4g}" if isinstance(v, float) else str(v)) for v in r]
-            for r in t.rows]
+    rows = [["" if v is None else _cell(v) for v in r] for r in t.rows]
     widths = [max([len(c)] + [len(r[i]) for r in rows]) for i, c in enumerate(cols)]
     line = lambda vals: "  ".join(v.ljust(w) for v, w in zip(vals, widths))  # noqa: E731
     out = [line(cols), line(["-" * w for w in widths])] + [line(r) for r in rows]
