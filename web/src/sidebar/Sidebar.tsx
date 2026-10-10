@@ -28,9 +28,20 @@ function Draggable({ data, children, className, style, onClick, disabled, title 
 }) {
   const id = `pal:${data.kind}:${data.type ?? data.table}`;
   const { attributes, listeners, setNodeRef } = useDraggable({ id, data, disabled });
+  // the drag listeners capture Enter and Space; for a click-to-add control, make those keys
+  // add the block (keyboard users can't drag), keeping drag for the pointer
+  const onKeyDown = onClick
+    ? (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          e.stopPropagation();
+          onClick();
+        }
+      }
+    : (listeners as { onKeyDown?: React.KeyboardEventHandler })?.onKeyDown;
   return (
     <button ref={setNodeRef} className={className} style={style} onClick={onClick} disabled={disabled} title={title}
-      {...attributes} {...listeners} type="button">
+      {...attributes} {...listeners} onKeyDown={onKeyDown} type="button">
       {children}
     </button>
   );

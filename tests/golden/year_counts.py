@@ -6,4 +6,4 @@ out = students
 out = out.groupby("year", as_index=False, dropna=False).agg(
     students=("student_id", "size"),
 )
-out = out.sort_values("year")
+out = out.sort_values("year", kind="stable")

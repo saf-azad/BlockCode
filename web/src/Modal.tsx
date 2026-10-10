@@ -5,13 +5,43 @@ export function Modal({ title, children, onClose, actions, wide = false }: {
   title: string; children: ReactNode; onClose: () => void; actions: ReactNode; wide?: boolean;
 }) {
   const box = useRef<HTMLDivElement>(null);
+  const close = useRef(onClose);
+  close.current = onClose;
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', onKey);
-    const first = box.current?.querySelector<HTMLElement>('textarea, input, button.primary');
-    first?.focus();
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+    const prev = document.activeElement as HTMLElement | null;
+    const focusable = () => Array.from(
+      box.current?.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])') ?? []);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        close.current();
+      } else if (e.key === 'Tab') {
+        // keep focus inside the dialog
+        const items = focusable();
+        if (!items.length) return;
+        const first = items[0];
+        const last = items[items.length - 1];
+        const active = document.activeElement;
+        if (e.shiftKey && (active === first || !box.current?.contains(active))) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && active === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    // capture so Escape closes the dialog before the app's global key handler runs
+    window.addEventListener('keydown', onKey, true);
+    (box.current?.querySelector<HTMLElement>('textarea, input, button.primary')
+      ?? box.current)?.focus();
+    return () => {
+      window.removeEventListener('keydown', onKey, true);
+      prev?.focus?.();
+    };
+  }, []);
   return (
     <div className="modal-back" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className={`modal${wide ? ' wide' : ''}`} role="dialog" aria-modal="true" aria-label={title} ref={box}>

@@ -59,6 +59,24 @@ function useEngine() {
     return () => clearTimeout(t);
   }, [state.saved, state.program, state.project, tables, title, dispatch]);
 
+  // save straight away when the tab is hidden or closed, so an edit in the last half second
+  // before a reload isn't lost
+  useEffect(() => {
+    if (!state.project) return;
+    const flush = () => {
+      if (state.saved === 'unsaved') {
+        saveMeta({ title, program: state.program, order: (tables ?? []).map((x) => x.name) });
+      }
+    };
+    const onHide = () => { if (document.visibilityState === 'hidden') flush(); };
+    window.addEventListener('pagehide', flush);
+    document.addEventListener('visibilitychange', onHide);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      document.removeEventListener('visibilitychange', onHide);
+    };
+  }, [state.saved, state.program, state.project, tables, title]);
+
   useEffect(() => applyTheme(lang), [lang]);
 
   useEffect(() => {

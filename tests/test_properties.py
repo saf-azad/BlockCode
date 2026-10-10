@@ -69,9 +69,13 @@ def data_program(draw):
         if "calc" in nums:
             keys.append("calc")  # SQL drops a new column that grouping doesn't use
         aggs = [b.agg("count", None, "n")]
+        # sum over an all-empty group is 0 in pandas/R but NULL in SQL (a documented limit), so
+        # only sum columns that are never empty; the other functions agree either way
+        sure = [c for c in nums if c in ("student_id", "year")] or ["student_id"]
         for i, f in enumerate(draw(st.lists(st.sampled_from(["avg", "sum", "min", "max",
                                                              "count"]), max_size=2))):
-            aggs.append(b.agg(f, draw(st.sampled_from(nums)), f"{f}_{i}"))
+            col = draw(st.sampled_from(sure if f == "sum" else nums))
+            aggs.append(b.agg(f, col, f"{f}_{i}"))
         steps.append(b.group(keys, *aggs))
         cols = keys + [a["as"] for a in aggs]
         if keys and draw(st.booleans()):

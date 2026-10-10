@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import keyword
 import re
+import unicodedata
 from typing import Callable
 
 from blockcode.ir import Block
@@ -24,8 +25,62 @@ class ExprError(ValueError):
         self.block_id = block_id
 
 
+def _escape_char(ch: str) -> str:
+    if ch == "\n":
+        return "\\n"
+    if ch == "\t":
+        return "\\t"
+    # every other control character, and the Unicode line breaks, as a \u escape that
+    # Python, R and YAML all read back the same, so a string never spans lines
+    if ord(ch) < 32 or ord(ch) == 127 or ch in "\u0085  ":
+        return f"\\u{ord(ch):04x}"
+    return ch
+
+
+_NEEDS_ESCAPE = re.compile(r"[\x00-\x1f\x7f\u0085  ]")
+
+
 def py_str(s: str) -> str:
-    return '"' + s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n") + '"'
+    s = s.replace("\\", "\\\\").replace('"', '\\"')
+    return '"' + _NEEDS_ESCAPE.sub(lambda m: _escape_char(m.group()), s) + '"'
+
+
+def one_line(text: str) -> str:
+    """Text for a code comment: always a single line."""
+    return " ".join(str(text).split())
+
+
+_PY_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+PY_TAKEN = {"pd", "plt", "np"}  # the generated Python already uses these
+
+
+def name_problem(name) -> str | None:
+    """Why ``name`` can't be a variable in the generated Python, or None if it can.
+
+    Table, result, Set var and loop names are written into the code as they are, so they
+    must be plain identifiers."""
+    if isinstance(name, str) and _PY_NAME.match(name) and not keyword.iskeyword(name) \
+            and name not in PY_TAKEN:
+        return None
+    shown = one_line(str(name))[:40]
+    return (f'"{shown}" can\'t be a name in Python. Pick another one that starts with a letter '
+            f"and isn't a Python word like for or class.")
+
+
+def checked_name(name, block_id: str | None = None) -> str:
+    problem = name_problem(name)
+    if problem:
+        raise ExprError(problem, block_id)
+    return name
+
+
+def whole(value) -> int | None:
+    """A count written into the code (LIMIT, bins) as a plain int, or None if it isn't one."""
+    if isinstance(value, float) and value.is_integer():
+        value = int(value)
+    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+        return value
+    return None
 
 
 def py_lit(v) -> str:
@@ -39,9 +94,12 @@ def py_lit(v) -> str:
 
 
 def py_kwarg(name: str, value: str) -> str:
-    """``name=value`` in a call, or ``**{"name": value}`` when name isn't a Python identifier
-    (a column called "for" or "2nd")."""
-    if name.isidentifier() and not keyword.iskeyword(name):
+    """``name=value`` in a call, or ``**{"name": value}`` when name isn't a plain Python
+    identifier (a column called "for" or "2nd") or when Python would rewrite it. Python
+    normalises identifiers with NFKC, so a column "avg_Ｎｏ" written as ``avg_Ｎｏ=...`` would
+    silently become the column "avg_No"; the ``**{...}`` form keeps the name exactly."""
+    if (name.isidentifier() and not keyword.iskeyword(name)
+            and unicodedata.normalize("NFKC", name) == name):
         return f"{name}={value}"
     return f"**{{{py_str(name)}: {value}}}"
 
@@ -94,10 +152,29 @@ _R_RESERVED = {"if", "else", "repeat", "while", "function", "for", "next", "brea
                "FALSE", "NULL", "Inf", "NaN", "NA", "in"}
 
 
+def _r_plain(name) -> bool:
+    return (isinstance(name, str) and bool(_R_IDENT.match(name)) and name not in _R_RESERVED
+            and not re.match(r"^\.\d", name))
+
+
 def r_ident(name: str) -> str:
-    if _R_IDENT.match(name) and name not in _R_RESERVED and not re.match(r"^\.\d", name):
+    """A column name in R: bare when it can be, otherwise in backticks. R reads escapes inside
+    backticks just as it does in strings, so backslashes are escaped first, then backticks and
+    control characters: the name can never end the quotes early."""
+    name = str(name)
+    if _r_plain(name):
         return name
-    return "`" + name.replace("`", "\\`") + "`"
+    s = name.replace("\\", "\\\\").replace("`", "\\`")
+    return "`" + _NEEDS_ESCAPE.sub(lambda m: _escape_char(m.group()), s) + "`"
+
+
+def r_name(name, block_id: str | None = None) -> str:
+    """A table, result, Set var or loop name in R: a plain R name, like the Python ones."""
+    if _r_plain(name):
+        return name
+    shown = one_line(str(name))[:40]
+    raise ExprError(f'"{shown}" can\'t be a name in R. Pick another one that starts with a '
+                    f"letter and has only letters, digits, dots and _.", block_id)
 
 
 def _wrap(part: tuple[str, int], need: int) -> str:
@@ -138,8 +215,14 @@ class Renderer:
         a, b = self.sub(e, "a"), self.sub(e, "b")
         return f"{_wrap(a, p + 1)} {self.ops[op]} {_wrap(b, p + 1)}", p
 
-    def r_logic(self, e: Block) -> tuple[str, int]:
+    def logic_op(self, e: Block) -> str:
         op = e.field("op")
+        if op not in self.words:
+            raise ExprError('Pick "and" or "or".', e.id)
+        return op
+
+    def r_logic(self, e: Block) -> tuple[str, int]:
+        op = self.logic_op(e)
         p = self.prec[op]
         a, b = self.sub(e, "a"), self.sub(e, "b")
         return f"{_wrap(a, p)} {self.words[op]} {_wrap(b, p)}", p
@@ -183,11 +266,15 @@ class SqlRenderer(Renderer):
         return f"{_wrap(self.sub(e, 'a'), 5)} IN ({vals})", self.prec["cmp"]
 
     def r_text(self, e):
-        v = str(e.field("value", ""))
+        # the search text is data, so its own % and _ (and the \\ escape) are escaped and a
+        # LIKE wildcard is added around it; without this, searching for "50%" or "a_b" would
+        # treat those as wildcards and match far too much
+        raw = str(e.field("value", ""))
+        v = raw.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         pat = {"contains": f"%{v}%", "starts": f"{v}%", "ends": f"%{v}"}.get(e.field("op"))
         if pat is None:
             raise ExprError(f'"{e.field("op")}" is not a text test.', e.id)
-        return f"{_wrap(self.sub(e, 'a'), 5)} LIKE {sql_str(pat)}", self.prec["cmp"]
+        return f"{_wrap(self.sub(e, 'a'), 5)} LIKE {sql_str(pat)} ESCAPE '\\'", self.prec["cmp"]
 
     def _is_int(self, e: Block | None) -> bool:
         if e is None:
@@ -211,6 +298,15 @@ class SqlRenderer(Renderer):
                 if b is not None and b.type == "lit":
                     return f"{_wrap(self.sub(e, 'a'), p)} / {float(b.field('value'))!r}", p
                 return f"CAST({self.sub(e, 'a')[0]} AS REAL) / {_wrap(self.sub(e, 'b'), p + 1)}", p
+        if e.field("op") == "%":
+            # SQLite's % truncates toward zero and only does whole numbers (-7 % 3 = -1,
+            # 2.5 % 2 = 0). pandas and R floor instead (-7 %% 3 = 2, 2.5 %% 2 = 0.5), so build
+            # the floored remainder: whole numbers stay whole, decimals use floor().
+            aw = _wrap(self.sub(e, "a"), 7)
+            bw = _wrap(self.sub(e, "b"), 7)
+            if self._is_int(e.inputs.get("a")) and self._is_int(e.inputs.get("b")):
+                return f"(({aw} % {bw}) + {bw}) % {bw}", self.prec["%"]
+            return f"{aw} - {bw} * floor({aw} * 1.0 / {bw})", self.prec["-"]
         return super().r_math(e)
 
 
@@ -232,7 +328,7 @@ class PandasRenderer(Renderer):
 
     def r_logic(self, e):
         # & and | bind tighter than comparisons in Python, so comparisons always get brackets.
-        op = e.field("op")
+        op = self.logic_op(e)
         p = self.prec[op]
         a, b = self.sub(e, "a"), self.sub(e, "b")
         return f"{_wrap(a, p)} {self.words[op]} {_wrap(b, p)}", p
@@ -272,10 +368,10 @@ class RRenderer(Renderer):
         return r_lit(e.field("value")), ATOM
 
     def r_var(self, e):
-        return r_ident(e.field("name")), ATOM
+        return r_name(e.field("name"), e.id), ATOM
 
     def r_field(self, e):
-        return f"{r_ident(e.field('var'))}${r_ident(e.field('name'))}", ATOM
+        return f"{r_name(e.field('var'), e.id)}${r_ident(e.field('name'))}", ATOM
 
     def r_not(self, e):
         return f"!{_wrap(self.sub(e, 'a'), ATOM)}", self.prec["not"]
@@ -288,12 +384,17 @@ class RRenderer(Renderer):
         return f"{_wrap(self.sub(e, 'a'), 7)} %in% c({vals})", 7
 
     def r_text(self, e):
-        v = r_lit(str(e.field("value", "")).lower())
+        raw = str(e.field("value", "")).lower()
         fn = {"contains": "str_detect", "starts": "str_starts", "ends": "str_ends"}.get(
             e.field("op"))
         if fn is None:
             raise ExprError(f'"{e.field("op")}" is not a text test.', e.id)
-        return f"{fn}(tolower({self.sub(e, 'a')[0]}), fixed({v}))", ATOM
+        col = self.sub(e, "a")[0]
+        if raw == "":
+            # stringr errors on an empty pattern; an empty search matches every non-empty row,
+            # as it does in SQL (LIKE '%%') and pandas
+            return f"!is.na({col})", ATOM
+        return f"{fn}(tolower({col}), fixed({r_lit(raw)}))", ATOM
 
 
 class PyRenderer(Renderer):
@@ -307,13 +408,19 @@ class PyRenderer(Renderer):
         return py_lit(e.field("value")), ATOM
 
     def r_var(self, e):
-        return e.field("name"), ATOM
+        return checked_name(e.field("name"), e.id), ATOM
 
     def r_field(self, e):
-        return f"{e.field('var')}.{e.field('name')}", ATOM
+        name = e.field("name")
+        if not isinstance(name, str) or not name.isidentifier() or keyword.iskeyword(name):
+            raise ExprError(f'"{one_line(str(name))[:40]}" can\'t be read as a row field in '
+                            f"Python. Rename the column so it starts with a letter and has no "
+                            f"spaces.", e.id)
+        return f"{checked_name(e.field('var'), e.id)}.{name}", ATOM
 
     def r_col(self, e):
-        raise ExprError(f'Use a row field like row.{e.field("name")} here, not a column.', e.id)
+        raise ExprError(f'Use a row field like row.{one_line(str(e.field("name")))[:40]} here, '
+                        f"not a column.", e.id)
 
     def r_not(self, e):
         return f"not {_wrap(self.sub(e, 'a'), self.prec['not'])}", self.prec["not"]

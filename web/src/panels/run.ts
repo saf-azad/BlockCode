@@ -1,4 +1,5 @@
 import { api } from '../api';
+import { usedTables } from '../ir';
 import { effectiveLang, storedTables, useStore } from '../store';
 
 export function useRun() {
@@ -7,7 +8,9 @@ export function useRun() {
     const lang = effectiveLang(state);
     dispatch({ type: 'running' });
     try {
-      const run = await api.run(state.program, lang, storedTables(state));
+      const used = new Set(usedTables(state.program));
+      const tables = storedTables(state).filter((t) => used.has(t.info.name));
+      const run = await api.run(state.program, lang, tables);
       dispatch({ type: 'ran', run });
       if (run.error?.block_id) dispatch({ type: 'focus', id: run.error.block_id });
     } catch (e) {
