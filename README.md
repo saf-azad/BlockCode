@@ -73,8 +73,15 @@ Vercel has no R, so the R tab shows and exports code but can't run it. Vercel li
 
 - A CSV can be up to 10 MB. Results show the first 200 rows. Python stops after 10 seconds, R
   after 20. A run returns at most 12 plots and 100,000 characters of printed output.
-- Code typed in the Python or R tab can include lines that aren't blocks (they become "Raw code"
-  blocks), so **visitors can run any Python or R on the server**. Each run gets a clean environment
-  (none of the server's variables), CPU-time and file-size limits, and capped output; in the Docker
-  image it also runs as a user that can't change the app. Don't give the deployment secrets it
-  doesn't need. For a large public audience, also put the host behind rate limiting.
+- Code typed in the Python or R tab can include lines that aren't blocks (they become "Code" /
+  raw blocks). Running those means running arbitrary Python or R on the server, so on a shared,
+  public deployment it is **off by default**: `/api/run` refuses any program that contains a Code
+  block and points at it. Programs built only from blocks still run, and showing and exporting code
+  are unaffected. On a trusted or sandboxed host (a local `blockcode serve`, the Docker image), turn
+  running it back on with `BLOCKCODE_ALLOW_RAW_CODE=1`. The `blockcode run` CLI, which only runs
+  code you already have on your own machine, is not affected.
+- When running free-typed code is enabled, each run still gets a clean environment (none of the
+  server's variables), CPU-time and file-size limits, and capped output; in the Docker image it also
+  runs as a user that can't change the app. Don't give the deployment secrets it doesn't need, and
+  for a public audience put the host behind a rate limit (for example a Vercel Firewall rule on
+  `/api/*`, such as 20 requests per minute per IP).

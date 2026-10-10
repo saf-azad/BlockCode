@@ -45,7 +45,9 @@ export function Output() {
         <div className="errcard" role="button" tabIndex={0} data-testid="run-error"
           onClick={() => run.error?.block_id && dispatch({ type: 'focus', id: run.error.block_id })}
           onKeyDown={(e) => e.key === 'Enter' && run.error?.block_id && dispatch({ type: 'focus', id: run.error.block_id })}>
-          <h3>{run.error.kind === 'NoR' ? 'R is not installed' : `${run.error.kind}${run.error.line ? ` on line ${run.error.line}` : ''}`}</h3>
+          <h3>{run.error.kind === 'NoR' ? 'R is not installed'
+            : run.error.kind === 'RawCodeBlocked' ? "Code blocks can't run here"
+            : `${run.error.kind}${run.error.line ? ` on line ${run.error.line}` : ''}`}</h3>
           <p>{run.error.message}</p>
           {run.error.detail && run.error.detail !== run.error.message && <code>{run.error.detail}</code>}
           {run.error.block_id && <span className="go">Show me the block →</span>}
