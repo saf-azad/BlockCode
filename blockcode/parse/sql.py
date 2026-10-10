@@ -111,6 +111,10 @@ class _Select:
     def starts_of(self, clause: str) -> list[int]:
         return [n for _, n, h in self.clauses if h == clause]
 
+    def start(self, clause: str) -> int:
+        """The line a clause starts on (the query's first line when it shares a line)."""
+        return (self.starts_of(clause) or [self.first])[0]
+
     # ---- building --------------------------------------------------------------------------
 
     def build(self) -> Block:
@@ -202,7 +206,7 @@ class _Select:
                 steps.append(self.spans.add(s, *sel_lines))
         else:
             if t.args.get("having") is not None:
-                raise Unsupported("HAVING needs a GROUP BY.", self.starts_of("having")[0])
+                raise Unsupported("HAVING needs a GROUP BY.", self.start("having"))
             if not star:
                 s = b.select(*order_names)
                 steps.append(self.spans.add(s, *sel_lines))
@@ -217,7 +221,7 @@ class _Select:
             for o in order.expressions:
                 node = o.this if isinstance(o, exp.Ordered) else o
                 if not isinstance(node, exp.Column):
-                    raise Unsupported("ORDER BY needs column names.", self.starts_of("order by")[0])
+                    raise Unsupported("ORDER BY needs column names.", self.start("order by"))
                 keys.append((node.name, bool(o.args.get("desc"))))
             steps.append(self.spans.add(b.order(*keys), *self.lines_of("order by")))
 
@@ -225,7 +229,7 @@ class _Select:
         if lim is not None:
             n = lim.expression if lim.expression is not None else lim.this
             if not (isinstance(n, exp.Literal) and not n.is_string and n.this.isdigit()):
-                raise Unsupported("LIMIT needs a whole number.", self.starts_of("limit")[0])
+                raise Unsupported("LIMIT needs a whole number.", self.start("limit"))
             steps.append(self.spans.add(b.limit(int(n.this)), *self.lines_of("limit")))
 
         frm.stacks["steps"] = steps
@@ -306,7 +310,7 @@ class _Select:
         # GROUP BY grade / 10: show the sum as a new column and group by that
         name = f"group_key{len(self.pending_derives) + 1}"
         self.derived[name] = k
-        line = (self.starts_of("group by") or [self.first])[0]
+        line = self.start("group by")
         self.pending_derives.append(self.spans.add(b.derive(name, self._expr(k)), line))
         return name
 

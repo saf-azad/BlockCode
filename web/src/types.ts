@@ -20,6 +20,8 @@ export interface ColumnInfo {
   name: string;
   type: string;
   empty: number;
+  unique?: boolean;
+  typical?: number | string | null; // median number or most common text
 }
 
 export interface TableInfo {

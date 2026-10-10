@@ -31,10 +31,10 @@ export function ErdPanel() {
   const { state, dispatch } = useStore();
   const [erd, setErd] = useState<Erd | null>(null);
   const [notation, setNotation] = useState<Notation>('crow');
-  const tablesKey = (state.project?.tables ?? []).map((t) => t.name + t.rows).join(',');
+  const tables = state.project?.tables;
   useEffect(() => {
-    api.erd(state.projectName).then(setErd).catch(() => setErd(null));
-  }, [state.projectName, tablesKey]);
+    api.erd(tables ?? []).then(setErd).catch(() => setErd(null));
+  }, [tables]);
   if (!erd) return null;
   const boxes = layout(erd);
   const box = (n: string) => boxes.find((b) => b.name === n)!;

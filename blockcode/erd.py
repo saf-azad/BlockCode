@@ -48,21 +48,29 @@ def _unique(conn: sqlite3.Connection, table: str, column: str) -> bool:
     return total > 0 and distinct == total == filled
 
 
-def infer_erd(tables: list[TableInfo], db_path: Path) -> Erd:
+def infer_erd(tables: list[TableInfo], db_path: Path | None = None) -> Erd:
+    """Links between tables. Uniqueness comes from the data in ``db_path`` when given, else
+    from each column's ``unique`` flag (worked out when the CSV was loaded)."""
     erd = Erd(tables=[ErdTable(name=t.name, rows=t.rows,
                                columns=[ErdColumn(name=c.name, type=c.type) for c in t.columns])
                       for t in tables])
     by_name = {t.name: t for t in erd.tables}
-    conn = sqlite3.connect(f"file:{db_path.resolve()}?mode=ro", uri=True) if db_path.exists() \
-        else None
+    conn = sqlite3.connect(f"file:{db_path.resolve()}?mode=ro", uri=True) \
+        if db_path is not None and db_path.exists() else None
+
+    def unique(t: TableInfo, col: str) -> bool:
+        if conn:
+            return _unique(conn, t.name, col)
+        c = t.column(col)
+        return bool(c and c.unique)
+
     try:
         for i, a in enumerate(tables):
             for b in tables[i + 1:]:
                 shared = [c.name for c in a.columns if b.column(c.name)]
                 found = 0
                 for col in shared:
-                    ua = _unique(conn, a.name, col) if conn else False
-                    ub = _unique(conn, b.name, col) if conn else False
+                    ua, ub = unique(a, col), unique(b, col)
                     if ua and ub:
                         link = ErdLink(column=col, one=a.name, many=b.name, kind="1-1")
                     elif ua:

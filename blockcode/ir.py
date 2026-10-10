@@ -56,6 +56,8 @@ class ColumnInfo(BaseModel):
     name: str
     type: str  # "int" | "float" | "text" | "bool"
     empty: int = 0
+    unique: bool = False  # every value filled and different (a key candidate)
+    typical: int | float | str | None = None  # median number or most common text (for defaults)
 
 
 class TableInfo(BaseModel):

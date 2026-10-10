@@ -147,19 +147,20 @@ export function hasPythonOnly(program: Program): boolean {
 export interface Col {
   name: string;
   type: string;
+  typical?: number | string | null; // a value from the data, for new blocks' defaults
 }
 
 /** Columns visible to the step at ``index`` of a From stack (``index`` = steps.length for after
  * the whole stack). Mirrors blockcode/plan.py. */
 export function columnsAt(from: Block, index: number, tables: TableInfo[]): Col[] {
   const byName = new Map(tables.map((t) => [t.name, t]));
-  let cols: Col[] = (byName.get(from.fields.table)?.columns ?? []).map((c) => ({ name: c.name, type: c.type }));
+  let cols: Col[] = (byName.get(from.fields.table)?.columns ?? []).map((c) => ({ name: c.name, type: c.type, typical: c.typical }));
   const steps = from.stacks.steps ?? [];
   for (const b of steps.slice(0, index)) {
     if (b.type === 'join') {
       const t = byName.get(b.fields.table);
       for (const c of t?.columns ?? []) {
-        if (c.name !== b.fields.on && !cols.some((x) => x.name === c.name)) cols.push({ name: c.name, type: c.type });
+        if (c.name !== b.fields.on && !cols.some((x) => x.name === c.name)) cols.push({ name: c.name, type: c.type, typical: c.typical });
       }
     } else if (b.type === 'derive' && b.fields.name) {
       cols = cols.filter((c) => c.name !== b.fields.name).concat({ name: b.fields.name, type: 'float' });

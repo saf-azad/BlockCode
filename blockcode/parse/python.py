@@ -61,6 +61,21 @@ def _kw(call: ast.Call, name: str) -> ast.AST | None:
     return next((k.value for k in call.keywords if k.arg == name), None)
 
 
+def _kwargs(call: ast.Call) -> list[tuple[str, ast.expr]]:
+    """Keyword arguments, with ``**{"for": ...}`` (a name that isn't a Python identifier)
+    unpacked into its name and value."""
+    out = []
+    for k in call.keywords:
+        if k.arg is not None:
+            out.append((k.arg, k.value))
+        elif isinstance(k.value, ast.Dict) and all(isinstance(x, ast.Constant) and
+                                                    isinstance(x.value, str) for x in k.value.keys):
+            out += [(x.value, v) for x, v in zip(k.value.keys, k.value.values)]
+        else:
+            raise Unsupported("**keyword arguments", call.lineno)
+    return out
+
+
 class _PyParser:
     def __init__(self, code: str, tables: dict[str, TableInfo]) -> None:
         self.code = code
@@ -295,13 +310,10 @@ class _PyParser:
                 return base, steps + [self.join(node, node.args[0])]
             if method == "assign":
                 out = []
-                for k in node.keywords:
-                    v = k.value
+                for name, v in _kwargs(node):
                     if isinstance(v, ast.Lambda):
                         v = v.body
-                    if k.arg is None:
-                        raise Unsupported("assign(**...)")
-                    out.append(b.derive(k.arg, self.mask(v)))
+                    out.append(b.derive(name, self.mask(v)))
                 return base, steps + out
             if method == "query" and node.args:
                 q = _const(node.args[0], str)
@@ -355,14 +367,13 @@ class _PyParser:
         aggs = []
         if acall.args:
             raise Unsupported("agg needs named summaries like avg=(\"col\", \"mean\")")
-        for k in acall.keywords:
-            v = k.value
+        for alias, v in _kwargs(acall):
             if not (isinstance(v, ast.Tuple) and len(v.elts) == 2):
                 raise Unsupported("agg needs named summaries like avg=(\"col\", \"mean\")")
             col, fn = _const(v.elts[0], str), _const(v.elts[1], str)
             if fn not in AGG:
                 raise Unsupported(f'"{fn}" summary')
-            aggs.append(b.agg(AGG[fn], None if fn == "size" else col, k.arg))
+            aggs.append(b.agg(AGG[fn], None if fn == "size" else col, alias))
         return b.group(keys, *aggs)
 
     def whole_table(self, d: ast.Dict) -> tuple[str, list[Block]] | None:

@@ -7,7 +7,7 @@ follow SQL's rules: a row whose value is empty is never kept by a filter.
 from __future__ import annotations
 
 from blockcode.codegen.emitter import Emitter
-from blockcode.codegen.expr import PandasRenderer, py_str
+from blockcode.codegen.expr import PandasRenderer, py_kwarg, py_str
 from blockcode.ir import TableInfo
 from blockcode.plan import Plan
 
@@ -35,7 +35,7 @@ def emit_pipeline(em: Emitter, plan: Plan, tables: dict[str, TableInfo], loaded:
         how = ', how="left"' if j.field("how") == "left" else ""
         em.emit(f'{out} = {out}.merge({j.field("table")}, on={py_str(j.field("on"))}{how})', j.id)
     for d in plan.derives:
-        em.emit(f"{out} = {out}.assign({d.field('name')}={r(d.inputs.get('expr'))})", d.id)
+        em.emit(f"{out} = {out}.assign({py_kwarg(d.field('name'), r(d.inputs.get('expr')))})", d.id)
     for w in plan.wheres:
         em.emit(f"{out} = {out}[{r(w.inputs.get('cond'))}]", w.id)
     if plan.group:
@@ -84,7 +84,7 @@ def emit_group(em: Emitter, plan: Plan, out: str) -> None:
             col, fn = (others[0] if others else by[0]), "size"
         else:
             col, fn = a.get("column"), PD_AGG.get(a.get("func"), a.get("func"))
-        em.emit(f"    {a['as']}=({py_str(col)}, {py_str(fn)}),", g.id)
+        em.emit(f"    {py_kwarg(a['as'], f'({py_str(col)}, {py_str(fn)})')},", g.id)
     em.emit(")", g.id)
 
 

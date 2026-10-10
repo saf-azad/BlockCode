@@ -1,209 +1,246 @@
-"""FastAPI server: JSON API under /api and the built web app at /."""
+"""FastAPI server: a stateless JSON API under /api and the built web app at /.
+
+The server keeps nothing between requests. Each visitor's tables and blocks live in their own
+browser. A request that runs or exports code carries the CSVs it needs; they are tidied into a
+temporary folder, used, and thrown away. Visitors never see each other's data, and it works the
+same on one machine as on serverless hosts like Vercel, where requests land on different
+instances.
+"""
 
 from __future__ import annotations
 
 import io
-import os
-import tempfile
+import json
+import logging
+import re
+import sqlite3
 import zipfile
+import zlib
+from contextlib import contextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Iterator
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import Response
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, ValidationError
+from starlette.concurrency import run_in_threadpool
 
 from blockcode import __version__
 from blockcode.codegen import TARGETS, generate
-from blockcode.ir import Program, Project
-from blockcode.project_io import ProjectError, ProjectStore
+from blockcode.data_io import CsvError, add_table, table_name_for
+from blockcode.ir import Program, TableInfo
 from blockcode.registry import SPECS, STEP_ORDER
 
 ROOT = Path(__file__).resolve().parent.parent
 # The built web app: web/dist locally, public/ when the Vercel build puts it there.
 WEB_DIRS = (ROOT / "web" / "dist", ROOT / "public")
-MAX_UPLOAD = 20 * 1024 * 1024
+MAX_FILE = 10 * 1024 * 1024  # one CSV, after unzipping
+MAX_TABLES = 30
+TOO_BIG = f"That file is too big ({MAX_FILE // (1024 * 1024)} MB max)."
+OOPS = ("Something went wrong inside BlockCode with these blocks. Undo your last change, or "
+        "remove the block you just edited, and try again.")
+log = logging.getLogger("blockcode")
 
 
-def default_projects_dir() -> Path:
-    """Where projects live: $BLOCKCODE_PROJECTS_DIR, else /tmp on Vercel (the only writable
-    place there, and not kept between cold starts), else ./projects."""
-    if os.environ.get("BLOCKCODE_PROJECTS_DIR"):
-        return Path(os.environ["BLOCKCODE_PROJECTS_DIR"])
-    if os.environ.get("VERCEL"):
-        return Path(tempfile.gettempdir()) / "blockcode-projects"
-    return Path("projects")
-
-
-class ProgramIn(BaseModel):
+class GenerateIn(BaseModel):
     program: Program
-    target: str = "sql"
+    tables: list[TableInfo] = Field(default_factory=list)
+    title: str = ""
 
 
 class ParseIn(BaseModel):
     code: str
     lang: str
+    tables: list[TableInfo] = Field(default_factory=list)
     previous: Program | None = None
 
 
-class NewProject(BaseModel):
-    name: str
+class TablesIn(BaseModel):
+    tables: list[TableInfo] = Field(default_factory=list)
+
+
+class RunIn(BaseModel):
+    program: Program
+    target: str = "sql"
     title: str = ""
-    sample: bool = True
 
 
-def create_app(projects_dir: Path | None = None) -> FastAPI:
+def target_ok(target: str) -> str:
+    if target not in TARGETS:
+        raise HTTPException(400, f"target must be one of {', '.join(TARGETS)}")
+    return target
+
+
+def unzip(content: bytes) -> bytes:
+    """The browser gzips CSVs before sending them; plain files are accepted too."""
+    if len(content) > MAX_FILE:
+        raise HTTPException(413, TOO_BIG)
+    if not content.startswith(b"\x1f\x8b"):
+        return content
+    d = zlib.decompressobj(16 + zlib.MAX_WBITS)
+    try:
+        out = d.decompress(content, MAX_FILE + 1)
+    except zlib.error as exc:
+        raise HTTPException(400, "That file arrived damaged. Please try again.") from exc
+    if len(out) > MAX_FILE:
+        raise HTTPException(413, TOO_BIG)
+    return out
+
+
+def table_name(filename: str) -> str:
+    return table_name_for(re.sub(r"(\.gz)?$", "", filename or "table.csv"))
+
+
+async def read_files(files: list[UploadFile]) -> list[tuple[str, bytes]]:
+    if len(files) > MAX_TABLES:
+        raise HTTPException(400, f"At most {MAX_TABLES} tables at a time.")
+    return [(table_name(f.filename or "table.csv"), unzip(await f.read(MAX_FILE + 1)))
+            for f in files]
+
+
+@contextmanager
+def workspace(files: list[tuple[str, bytes]]) -> Iterator[tuple[Path, Path, list[TableInfo]]]:
+    """A throwaway folder with ``data/<table>.csv`` and ``db.sqlite`` built from the uploads."""
+    with TemporaryDirectory(prefix="blockcode-ws-") as tmp:
+        d = Path(tmp)
+        db = d / "db.sqlite"
+        sqlite3.connect(db).close()
+        tables: list[TableInfo] = []
+        for name, content in files:
+            try:
+                info, _ = add_table(d, db, f"{name}.csv", content, name=name)
+            except CsvError as exc:
+                raise HTTPException(400, f"{name}: {exc}") from exc
+            tables = [t for t in tables if t.name != info.name] + [info]
+        yield d, db, tables
+
+
+def parse_run(request: str) -> RunIn:
+    try:
+        body = RunIn.model_validate(json.loads(request))
+    except (ValueError, ValidationError) as exc:
+        raise HTTPException(422, "The request was not understood.") from exc
+    target_ok(body.target)
+    return body
+
+
+def create_app() -> FastAPI:
+    from blockcode.run.sandbox import protect_server_process
+
+    protect_server_process()
     app = FastAPI(title="BlockCode", version=__version__)
-    store = ProjectStore(Path(projects_dir or default_projects_dir()).resolve())
-    app.state.store = store
 
-    def load(name: str) -> Project:
-        try:
-            return store.load(name)
-        except ProjectError as exc:
-            raise HTTPException(404, str(exc)) from exc
-
-    def target_ok(target: str) -> str:
-        if target not in TARGETS:
-            raise HTTPException(400, f"target must be one of {', '.join(TARGETS)}")
-        return target
+    @app.exception_handler(Exception)
+    async def unexpected(request: Request, exc: Exception) -> JSONResponse:
+        log.exception("unexpected error on %s", request.url.path)
+        return JSONResponse({"detail": OOPS}, status_code=500)
 
     @app.get("/api/health")
     def health() -> dict:
-        return {"ok": True, "version": __version__}
+        from blockcode.run.r_runner import rscript
+
+        return {"ok": True, "version": __version__, "r": rscript() is not None,
+                "max_file": MAX_FILE}
 
     @app.get("/api/blocks")
     def blocks() -> dict:
         return {"blocks": [s.model_dump() for s in SPECS.values()], "step_order": STEP_ORDER}
 
-    @app.get("/api/projects")
-    def projects() -> dict:
-        return {"projects": store.list()}
+    @app.post("/api/tables")
+    async def inspect_table(file: UploadFile = File(...)) -> dict:
+        """Read an uploaded CSV: its columns, types and empty counts, plus notes on anything
+        that was tidied. The file itself is not kept."""
+        name = table_name(file.filename or "table.csv")
+        content = unzip(await file.read(MAX_FILE + 1))
 
-    @app.post("/api/projects")
-    def create_project(body: NewProject) -> Project:
-        try:
-            return store.create(body.name, body.title, sample=body.sample)
-        except ProjectError as exc:
-            raise HTTPException(400, str(exc)) from exc
+        def work() -> dict:
+            with TemporaryDirectory(prefix="blockcode-in-") as tmp:
+                d = Path(tmp)
+                try:
+                    info, notes = add_table(d, d / "db.sqlite", f"{name}.csv", content, name=name)
+                except CsvError as exc:
+                    raise HTTPException(400, str(exc)) from exc
+            return {"table": info.model_dump(), "notes": notes}
 
-    @app.get("/api/projects/{name}")
-    def get_project(name: str) -> Project:
-        """Opening a project that doesn't exist yet creates it with the school sample."""
-        if not store.exists(name):
-            try:
-                return store.create(name)
-            except ProjectError as exc:
-                raise HTTPException(400, str(exc)) from exc
-        return load(name)
+        return await run_in_threadpool(work)
 
-    @app.put("/api/projects/{name}/program")
-    def save_program(name: str, program: Program) -> dict:
-        load(name)
-        store.save_program(name, program)
-        return {"ok": True}
-
-    @app.post("/api/projects/{name}/data")
-    async def upload(name: str, file: UploadFile = File(...)) -> dict:
-        load(name)
-        content = await file.read()
-        if len(content) > MAX_UPLOAD:
-            raise HTTPException(413, "That file is too big (20 MB max).")
-        if not (file.filename or "").lower().endswith(".csv"):
-            raise HTTPException(400, "Only .csv files can be dropped here.")
-        try:
-            info = store.add_csv(name, file.filename or "table.csv", content)
-        except ProjectError as exc:
-            raise HTTPException(400, str(exc)) from exc
-        return {"table": info.model_dump()}
-
-    @app.post("/api/projects/{name}/generate")
-    def gen(name: str, body: ProgramIn) -> dict:
-        project = load(name)
-        target = target_ok(body.target)
-        extra = {"title": project.title or project.name} if target == "r" else {}
-        return generate(body.program, project.tables, target, **extra).model_dump()
-
-    @app.post("/api/projects/{name}/generate-all")
-    def gen_all(name: str, body: ProgramIn) -> dict:
+    @app.post("/api/generate-all")
+    def gen_all(body: GenerateIn) -> dict:
         """Code, source map and problems for every language at once (the editor shows the
         hovered block in all three)."""
         from blockcode.validate import validate
 
-        project = load(name)
-        tables = {t.name: t for t in project.tables}
+        from blockcode.codegen.emitter import Generated
+        from blockcode.diagnostics import error
+
+        tables = {t.name: t for t in body.tables}
         out = {}
         for t in TARGETS:
-            extra = {"title": project.title or project.name} if t == "r" else {}
-            g = generate(body.program, tables, t, **extra)
-            g.diagnostics = validate(body.program, tables, t, generated=g)
+            extra = {"title": body.title or "BlockCode"} if t == "r" else {}
+            try:
+                g = generate(body.program, tables, t, **extra)
+                g.diagnostics = validate(body.program, tables, t, generated=g)
+            except Exception:  # one language failing shouldn't take the others down
+                log.exception("generate %s failed", t)
+                g = Generated(target=t, code="", lines=[], diagnostics=[error(OOPS)], ok=False)
             out[t] = g.model_dump()
         return out
 
-    @app.get("/api/examples")
-    def examples() -> dict:
-        from blockcode.examples import TITLES
-
-        return {"examples": [{"name": k, "title": v} for k, v in TITLES.items()]}
-
-    @app.get("/api/examples/{example}")
-    def example(example: str) -> Program:
-        from blockcode.examples import school
-
-        progs = school()
-        if example not in progs:
-            raise HTTPException(404, "No such example.")
-        return progs[example]
-
-    @app.post("/api/projects/{name}/validate")
-    def check(name: str, body: ProgramIn) -> dict:
-        from blockcode.validate import validate
-
-        project = load(name)
-        tables = {t.name: t for t in project.tables}
-        diags = validate(body.program, tables, target_ok(body.target))
-        return {"diagnostics": [d.model_dump() for d in diags]}
-
-    @app.post("/api/projects/{name}/run")
-    def run(name: str, body: ProgramIn) -> dict:
-        from blockcode.engine import run as run_program
-
-        project = load(name)
-        return run_program(store, project, body.program, target_ok(body.target)).model_dump()
-
-    @app.post("/api/projects/{name}/parse")
-    def parse(name: str, body: ParseIn) -> dict:
+    @app.post("/api/parse")
+    def parse(body: ParseIn) -> dict:
         from blockcode.parse import parse_code
 
-        project = load(name)
-        return parse_code(body.code, target_ok(body.lang), project.tables,
+        return parse_code(body.code, target_ok(body.lang), body.tables,
                           previous=body.previous).model_dump()
 
-    @app.get("/api/projects/{name}/erd")
-    def erd(name: str) -> dict:
+    @app.post("/api/erd")
+    def erd(body: TablesIn) -> dict:
         from blockcode.erd import infer_erd
 
-        project = load(name)
-        return infer_erd(project.tables, store.ensure_db(project.name)).model_dump()
+        return infer_erd(body.tables).model_dump()
 
-    @app.post("/api/projects/{name}/export")
-    def export(name: str, body: ProgramIn) -> Response:
-        from blockcode.export import export_project
+    @app.post("/api/run")
+    async def run(request: str = Form(...), files: list[UploadFile] = File(default=[])) -> dict:
+        from blockcode.engine import run_in
 
-        project = load(name)
-        project.program = body.program
-        with TemporaryDirectory() as tmp:
-            try:
-                files = export_project(store, project, target_ok(body.target), Path(tmp))
-            except ProjectError as exc:
-                raise HTTPException(400, str(exc)) from exc
-            buf = io.BytesIO()
-            with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
-                for f in files:
-                    z.write(f, f.relative_to(tmp).as_posix())
-        fname = f"{project.name}-{body.target}.zip"
-        return Response(buf.getvalue(), media_type="application/zip",
+        body = parse_run(request)
+        data = await read_files(files)
+
+        def work() -> dict:
+            with workspace(data) as (d, db, tables):
+                return run_in(d, db, tables, body.program, body.target).model_dump()
+
+        return await run_in_threadpool(work)
+
+    @app.post("/api/export")
+    async def export(request: str = Form(...),
+                     files: list[UploadFile] = File(default=[])) -> Response:
+        from blockcode.export import export_files
+        from blockcode.project_io import ProjectError
+
+        body = parse_run(request)
+        data = await read_files(files)
+        stem = re.sub(r"[^A-Za-z0-9]+", "_", body.title).strip("_").lower() or "analysis"
+
+        def work() -> bytes:
+            with workspace(data) as (d, db, tables), TemporaryDirectory() as out_dir:
+                out = Path(out_dir)
+                try:
+                    written = export_files(d, db, tables, body.program, body.target, out,
+                                           title=body.title or "BlockCode", stem=stem)
+                except ProjectError as exc:
+                    raise HTTPException(400, str(exc)) from exc
+                buf = io.BytesIO()
+                with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+                    for f in written:
+                        z.write(f, f.relative_to(out).as_posix())
+                return buf.getvalue()
+
+        content = await run_in_threadpool(work)
+        fname = f"{stem}-{body.target}.zip"
+        return Response(content, media_type="application/zip",
                         headers={"Content-Disposition": f'attachment; filename="{fname}"'})
 
     web = next((d for d in WEB_DIRS if (d / "index.html").is_file()), None)

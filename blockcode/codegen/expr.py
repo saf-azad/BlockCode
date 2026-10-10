@@ -6,6 +6,7 @@ wrapped in parentheses only when they bind more loosely than their parent needs.
 
 from __future__ import annotations
 
+import keyword
 import re
 from typing import Callable
 
@@ -37,6 +38,14 @@ def py_lit(v) -> str:
     return py_str(str(v))
 
 
+def py_kwarg(name: str, value: str) -> str:
+    """``name=value`` in a call, or ``**{"name": value}`` when name isn't a Python identifier
+    (a column called "for" or "2nd")."""
+    if name.isidentifier() and not keyword.iskeyword(name):
+        return f"{name}={value}"
+    return f"**{{{py_str(name)}: {value}}}"
+
+
 def sql_str(s: str) -> str:
     return "'" + s.replace("'", "''") + "'"
 
@@ -62,9 +71,16 @@ def r_lit(v) -> str:
 
 
 _SQL_IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-_SQL_RESERVED = {"select", "from", "where", "group", "order", "by", "having", "limit", "join",
-                 "on", "using", "as", "and", "or", "not", "in", "is", "null", "like", "table",
-                 "case", "when", "then", "else", "end", "desc", "asc", "values", "index"}
+# Words SQLite (or the sqlglot parser) can't take as a bare column or table name, found by
+# trying each SQLite keyword in SELECT / WHERE / GROUP BY / ORDER BY / USING.
+_SQL_RESERVED = set("""
+add all alter and as autoincrement between case cast check collate commit constraint create
+cross current_date current_time current_timestamp default deferrable delete distinct drop else
+escape except exists for foreign from glob group having if in index inner insert intersect into
+is isnull join like limit not nothing notnull null offset on or order outer primary raise
+references regexp returning rollback select set table then to transaction union unique update
+using values when where window with
+""".split())
 
 
 def sql_ident(name: str) -> str:

@@ -31,7 +31,7 @@ TOKEN = re.compile(r"""
 
 @dataclass
 class Tok:
-    kind: str  # nl, num, str, name, op, eof
+    kind: str  # nl, num, str, name, qname (backticked), op, eof
     value: str
     line: int
 
@@ -56,7 +56,7 @@ def tokenize(code: str) -> list[Tok]:
         elif kind in ("ws", "comment"):
             pass
         elif kind == "bt":
-            out.append(Tok("name", text[1:-1], line))
+            out.append(Tok("qname", text[1:-1], line))  # `for` is a name, never a keyword
         elif kind == "str":
             body = text[1:-1]
             body = re.sub(r"\\(.)", lambda mm: {"n": "\n", "t": "\t"}.get(mm.group(1),
@@ -138,6 +138,8 @@ class _Parser:
             node = N("num", int(v) if re.fullmatch(r"\d+", v) else float(v), line=line)
         elif t.kind == "str":
             node = N("str", t.value, line=line)
+        elif t.kind == "qname":
+            node = N("name", t.value, line=line)
         elif t.kind == "name":
             if t.value in ("TRUE", "FALSE", "T", "F"):
                 node = N("const", t.value in ("TRUE", "T"), line=line)
@@ -231,7 +233,7 @@ class _Parser:
                 self.next()
                 continue
             name = None
-            if self.tok.kind in ("name", "str") and self.toks[self.i + 1].value == "=":
+            if self.tok.kind in ("name", "qname", "str") and self.toks[self.i + 1].value == "=":
                 name = self.next().value
                 self.next()
             out.append((name, self.expr(0)))
@@ -289,7 +291,7 @@ class _Parser:
         self.expect("(")
         self.depth += 1
         var = self.next()
-        if var.kind != "name":
+        if var.kind not in ("name", "qname"):
             raise RSyntaxError("for needs a variable name", var.line)
         if self.next().value != "in":
             raise RSyntaxError("expected 'in'", line)

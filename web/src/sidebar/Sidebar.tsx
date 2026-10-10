@@ -1,8 +1,10 @@
 import { useDraggable } from '@dnd-kit/core';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import {
-  C_BLOCKS, columnsAt, find, insertBlock, loopVars, ownerStack, placeOf, resultColumns, setInput, SINGLE, stepIndex, variables,
+  C_BLOCKS, columnsAt, find, insertBlock, loopVars, ownerStack, placeOf, resultColumns, setInput, SINGLE, stepIndex, variables, walk,
 } from '../ir';
+import { deleteTable } from '../local';
+import { Confirm } from '../Modal';
 import { effectiveLang, useStore } from '../store';
 import { blockColour } from '../theme';
 import type { Block, Program, TableInfo } from '../types';
@@ -10,6 +12,7 @@ import { EXPR_KINDS, makeExpr } from '../stack/Expr';
 import type { DragData } from '../stack/dnd';
 import { WORDS } from '../stack/fields';
 import { makeBlock, targetStack } from '../stack/make';
+import { PasteData } from './PasteData';
 import { useUpload } from './upload';
 
 const DATA_PALETTE = ['join', 'derive', 'where', 'group', 'having', 'select', 'order', 'limit'];
@@ -105,6 +108,7 @@ export function Sidebar() {
   const upload = useUpload();
   const target = targetStack(state.program, state.focus);
   const w = WORDS[lang];
+  const [pasting, setPasting] = useState(false);
 
   const add = (type: string) => {
     const got = addFromPalette(type, state.program, state.focus, tables);
@@ -127,27 +131,38 @@ export function Sidebar() {
       <div className="section">
         <div className="section-head">
           <div className="section-title">Tables</div>
-          <button className={`btn tiny${state.erdOpen ? ' on' : ''}`} title="Sketch how these tables link up"
+          <button className={`btn tiny${state.erdOpen ? ' on' : ''}`} title="Sketch how these tables link up" disabled={!tables.length}
             onClick={() => dispatch({ type: 'erd', open: !state.erdOpen })}>
             <svg width="14" height="12" viewBox="0 0 14 12" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><rect x="0.8" y="0.8" width="4.4" height="4.4" /><rect x="8.8" y="0.8" width="4.4" height="4.4" /><rect x="4.8" y="6.8" width="4.4" height="4.4" /><path d="M3 5.2 L7 6.8 M11 5.2 L7 6.8" /></svg>
             ERD
           </button>
         </div>
         {tables.map((t) => <TableCard key={t.name} t={t} />)}
-        <button className="drop-target" onClick={() => fileRef.current?.click()}>Drop a .csv here</button>
-        <input ref={fileRef} type="file" accept=".csv,text/csv" className="sr-only" aria-label="Choose a CSV file"
+        {state.uploading > 0 && <div className="reading" role="status">Reading your file…</div>}
+        {tables.length ? (
+          <button className="drop-target" onClick={() => fileRef.current?.click()}>+ Add another CSV</button>
+        ) : (
+          <button className="drop-target big" onClick={() => fileRef.current?.click()} data-testid="add-csv">
+            <svg width="26" height="26" viewBox="0 0 26 26" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true"><path d="M13 17V4M7.5 9.5 13 4l5.5 5.5M4 18v4h18v-4" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            <b>Add a CSV file</b>
+            <span>Click to choose, or drop it here</span>
+          </button>
+        )}
+        <button className="linkish" onClick={() => setPasting(true)}>or paste data from a spreadsheet</button>
+        <input ref={fileRef} type="file" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values" multiple className="sr-only" aria-label="Choose CSV files"
           onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) upload(f);
+            if (e.target.files?.length) upload(e.target.files);
             e.target.value = '';
           }} />
+        {pasting && <PasteData onClose={() => setPasting(false)} />}
       </div>
 
       <div className="section">
         <div className="section-title">Blocks</div>
+        {!tables.length && <div className="locked-note">Add a table and these blocks come alive.</div>}
         <div className="palette">
           <Draggable className="pal-block" data={{ kind: 'new', type: 'from', family: 'statement', label: lang === 'sql' ? 'FROM' : 'From' }}
-            style={{ background: blockColour(lang, 'from')?.bg }} onClick={() => add('from')} title="Start a new stack from a table">
+            style={{ background: blockColour(lang, 'from')?.bg }} onClick={() => add('from')} title="Start a new stack from a table" disabled={!tables.length}>
             {lang === 'sql' ? 'FROM' : 'From'}
           </Draggable>
           {DATA_PALETTE.map((type) => {
@@ -197,21 +212,47 @@ export function Sidebar() {
   );
 }
 
+const SHOWN = 8;
+
 function TableCard({ t }: { t: TableInfo }) {
+  const { state, dispatch } = useStore();
+  const [all, setAll] = useState(false);
+  const [removing, setRemoving] = useState(false);
   const { attributes, listeners, setNodeRef } = useDraggable({
     id: `table:${t.name}`, data: { kind: 'table', table: t.name, family: 'statement', label: `FROM ${t.name}` } satisfies DragData,
   });
+  const users = [...walk(state.program.blocks)].filter((b) => (b.type === 'from' || b.type === 'join') && b.fields.table === t.name).length;
+  const cols = all ? t.columns : t.columns.slice(0, SHOWN);
+  const stop = (e: React.PointerEvent | React.KeyboardEvent) => e.stopPropagation();
   return (
-    <div ref={setNodeRef} className="table-card" {...attributes} {...listeners} title={`Drag onto the workspace to start a stack from ${t.name}`}>
-      <div className="head"><b>{t.name}</b><span>{t.rows.toLocaleString()} rows</span></div>
-      <div className="cols">
-        {t.columns.map((c) => (
-          <div key={c.name}>
-            <div className="col"><span>{c.name}</span><i>{c.type}</i></div>
-            {c.empty > 0 && <div className="empty">{c.empty} empty value{c.empty === 1 ? '' : 's'}</div>}
-          </div>
-        ))}
+    <>
+      <div ref={setNodeRef} className="table-card" {...attributes} {...listeners} title={`Drag onto the workspace to start a stack from ${t.name}`}>
+        <div className="head">
+          <b>{t.name}</b>
+          <span>{t.rows.toLocaleString()} row{t.rows === 1 ? '' : 's'}</span>
+          <button className="tx" title={`Remove ${t.name}`} aria-label={`Remove table ${t.name}`} onPointerDown={stop} onKeyDown={stop}
+            onClick={() => setRemoving(true)}>×</button>
+        </div>
+        <div className="cols">
+          {cols.map((c) => (
+            <div key={c.name}>
+              <div className="col"><span title={c.name}>{c.name}</span><i>{c.type}</i></div>
+              {c.empty > 0 && <div className="empty">{c.empty.toLocaleString()} empty value{c.empty === 1 ? '' : 's'}</div>}
+            </div>
+          ))}
+          {t.columns.length > SHOWN && (
+            <button className="more" onPointerDown={stop} onKeyDown={stop} onClick={() => setAll(!all)}>
+              {all ? 'Show fewer columns' : `+ ${t.columns.length - SHOWN} more column${t.columns.length - SHOWN === 1 ? '' : 's'}`}
+            </button>
+          )}
+        </div>
       </div>
-    </div>
+      {removing && (
+        <Confirm title={`Remove ${t.name}?`} action="Remove table" onClose={() => setRemoving(false)}
+          onConfirm={async () => { await deleteTable(t.name); dispatch({ type: 'removeTable', name: t.name }); }}>
+          <p>{users ? `${users} block${users > 1 ? 's use' : ' uses'} this table and will need another one. ` : ''}The table is removed from this browser; your original file is not touched.</p>
+        </Confirm>
+      )}
+    </>
   );
 }
