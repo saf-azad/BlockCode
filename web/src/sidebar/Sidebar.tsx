@@ -249,7 +249,7 @@ function TableCard({ t }: { t: TableInfo }) {
       </div>
       {removing && (
         <Confirm title={`Remove ${t.name}?`} action="Remove table" onClose={() => setRemoving(false)}
-          onConfirm={() => { deleteTable(t.name); dispatch({ type: 'removeTable', name: t.name }); }}>
+          onConfirm={async () => { await deleteTable(t.name); dispatch({ type: 'removeTable', name: t.name }); }}>
           <p>{users ? `${users} block${users > 1 ? 's use' : ' uses'} this table and will need another one. ` : ''}The table is removed from this browser; your original file is not touched.</p>
         </Confirm>
       )}

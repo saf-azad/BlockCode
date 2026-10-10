@@ -47,6 +47,9 @@ async function tx<T>(mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBReq
     try {
       const t = db.transaction(STORE, mode);
       const req = fn(t.objectStore(STORE));
+      // commit now rather than when the event loop is idle: a page reload right after a
+      // write can otherwise abort it
+      if (mode === 'readwrite' && typeof t.commit === 'function') t.commit();
       t.oncomplete = () => resolve(req ? (req.result as T) : undefined);
       t.onerror = () => resolve(undefined);
       t.onabort = () => resolve(undefined);

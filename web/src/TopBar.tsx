@@ -69,7 +69,8 @@ export function TopBar() {
       </div>
       {confirmNew && (
         <Confirm title="Start something new?" action="Clear everything" onClose={() => setConfirmNew(false)}
-          onConfirm={() => { clearWorkspace(); dispatch({ type: 'reset' }); }}>
+          // wait until the browser has really forgotten the work, or a quick reload could bring it back
+          onConfirm={async () => { await clearWorkspace(); dispatch({ type: 'reset' }); }}>
           <p>This removes your blocks and tables from this browser. Export first if you want to keep the code.</p>
         </Confirm>
       )}
