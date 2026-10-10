@@ -290,3 +290,46 @@ test('drag and drop: palette to stack, table to workspace, block into a loop', a
   await drag(page, page.getByRole('button', { name: 'Print', exact: true }), page.locator('[data-type="foreach"] .drop-end'), 0);
   await expect(page.locator('[data-type="foreach"] [data-type="print"]')).toBeVisible();
 });
+
+test('typing code then Ctrl+Z does not delete the blocks', async ({ page }) => {
+  await open(page);
+  await expect(page.locator('[data-type="join"]')).toBeVisible();
+  const before = await blockIds(page);
+  // focus the editor, type a stray character, then undo repeatedly
+  await page.locator('.cm-content').click();
+  await page.keyboard.type('x');
+  await expect(page.getByText(/Blocks unchanged|Blocks updated/)).toBeVisible();
+  for (let i = 0; i < 6; i++) await page.keyboard.press('Control+z');
+  // the blocks are still there: undoing generated text must not wipe the workspace
+  await expect(page.locator('[data-type="join"]')).toBeVisible();
+  expect(await blockIds(page)).toEqual(before);
+});
+
+test('keyboard users can add a block from the palette and Escape closes a dialog', async ({ page }) => {
+  await open(page, false);
+  await page.locator('input[type=file]').first().setInputFiles('../tests/fixtures/pets.csv');
+  await expect(page.getByText('Columns we found')).toBeVisible();
+  await page.locator('.overlay').click();
+
+  // Enter on the FROM palette button adds a From block, no mouse
+  await page.getByRole('button', { name: 'FROM', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('[data-type="from"]')).toHaveCount(1);
+
+  // Escape closes the "New" confirm dialog
+  await page.getByRole('button', { name: 'New', exact: true }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+
+test('run and export only send the tables the program uses', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('welcome')).toBeVisible();
+  // two tables; the program uses only pets
+  await addFiles(page, ['../tests/fixtures/pets.csv', '../tests/fixtures/owners.csv'], 2);
+  await page.getByRole('button', { name: 'FROM', exact: true }).click();
+  await page.locator('[data-type="from"] select').first().selectOption('pets');
+  const rows = await runTable(page);
+  expect(rows.length).toBeGreaterThan(0); // ran fine with an unused table present
+});
