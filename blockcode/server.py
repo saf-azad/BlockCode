@@ -5,6 +5,9 @@ browser. A request that runs or exports code carries the CSVs it needs; they are
 temporary folder, used, and thrown away. Visitors never see each other's data, and it works the
 same on one machine as on serverless hosts like Vercel, where requests land on different
 instances.
+
+SQL runs here. Python and R run in the visitor's browser when they can (POST /api/job prepares a
+run, POST /api/finish explains its outcome), and here as a fallback (POST /api/run).
 """
 
 from __future__ import annotations
@@ -23,6 +26,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
@@ -31,6 +35,7 @@ from starlette.concurrency import run_in_threadpool
 from blockcode import __version__
 from blockcode.codegen import TARGETS, generate
 from blockcode.data_io import CsvError, add_table, table_name_for
+from blockcode.engine import BROWSER_TARGETS, Raw
 from blockcode.ir import Program, TableInfo
 from blockcode.registry import SPECS, STEP_ORDER
 from blockcode.run import RunError, RunResult
@@ -52,6 +57,22 @@ RAW_OFF = ("Running free-typed code is turned off on this server, so a program w
            "the code. Rebuild the Code block as blocks to run it.")
 _TRUTHY = {"1", "true", "yes", "on"}
 log = logging.getLogger("blockcode")
+
+# Python and R run in the visitor's browser from these WebAssembly builds. Point them at your own
+# copies to self-host, or set BLOCKCODE_RUN_IN=server to run them on this machine instead.
+PYODIDE_URL = "https://cdn.jsdelivr.net/pyodide/v314.0.7/full/pyodide.mjs"
+WEBR_URL = "https://webr.r-wasm.org/v0.6.0/webr.mjs"
+WEBR_REPO = "https://repo.r-wasm.org/"
+
+
+def runtime_config() -> dict:
+    env = os.environ.get
+    return {
+        "run_in": "server" if env("BLOCKCODE_RUN_IN", "browser").strip() == "server" else "browser",
+        "pyodide": env("BLOCKCODE_PYODIDE_URL", PYODIDE_URL),
+        "webr": env("BLOCKCODE_WEBR_URL", WEBR_URL),
+        "webr_repo": env("BLOCKCODE_WEBR_REPO", WEBR_REPO),
+    }
 
 
 def raw_code_allowed() -> bool:
@@ -92,6 +113,13 @@ class RunIn(BaseModel):
     program: Program
     target: str = "sql"
     title: str = ""
+
+
+class FinishIn(BaseModel):
+    program: Program
+    target: str
+    tables: list[TableInfo] = Field(default_factory=list)
+    raw: Raw
 
 
 def target_ok(target: str) -> str:
@@ -158,6 +186,8 @@ def create_app() -> FastAPI:
 
     protect_server_process()
     app = FastAPI(title="BlockCode", version=__version__)
+    # a browser run's job carries its tidied CSVs back; they shrink 5-10x
+    app.add_middleware(GZipMiddleware, minimum_size=4096)
 
     @app.exception_handler(Exception)
     async def unexpected(request: Request, exc: Exception) -> JSONResponse:
@@ -169,7 +199,12 @@ def create_app() -> FastAPI:
         from blockcode.run.r_runner import rscript
 
         return {"ok": True, "version": __version__, "r": rscript() is not None,
-                "max_file": MAX_FILE}
+                "max_file": MAX_FILE, "run_in": runtime_config()["run_in"]}
+
+    @app.get("/api/runtime")
+    def runtime() -> dict:
+        """Where Python and R run, and where the browser loads them from."""
+        return runtime_config()
 
     @app.get("/api/blocks")
     def blocks() -> dict:
@@ -242,6 +277,35 @@ def create_app() -> FastAPI:
                 return run_in(d, db, tables, body.program, body.target).model_dump()
 
         return await run_in_threadpool(work)
+
+    @app.post("/api/job")
+    async def job(request: str = Form(...), files: list[UploadFile] = File(default=[])) -> dict:
+        """What the browser needs to run Python or R itself: the code, the harness and the
+        tidied CSVs, or the result that says why the program can't run. Nothing runs here, so
+        Code blocks are fine: they run in the visitor's own browser."""
+        from blockcode.engine import prepare_job
+
+        body = parse_run(request)
+        if body.target not in BROWSER_TARGETS:
+            raise HTTPException(400, "Only Python and R run in the browser.")
+        data = await read_files(files)
+
+        def work() -> dict:
+            with workspace(data) as (d, _db, tables):
+                todo, stopped = prepare_job(d, tables, body.program, body.target)
+            return {"job": todo.model_dump()} if todo else {"result": stopped.model_dump()}
+
+        return await run_in_threadpool(work)
+
+    @app.post("/api/finish")
+    def finish(body: FinishIn) -> dict:
+        """Turn what a run in the browser produced into a result: friendly errors that point at
+        their block, tables and plots, the same as a run here."""
+        from blockcode.engine import finish as finish_run
+
+        if body.target not in BROWSER_TARGETS:
+            raise HTTPException(400, "Only Python and R run in the browser.")
+        return finish_run(body.program, body.tables, body.target, body.raw).model_dump()
 
     @app.post("/api/export")
     async def export(request: str = Form(...),

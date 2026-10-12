@@ -35,6 +35,12 @@ def friendly(kind: str, message: str, target: str) -> str:
         return ("This query took too long, so it was stopped. A join on a column with many "
                 "repeated values can make a huge number of rows: check the JOIN key, or add a "
                 "WHERE block before it.")
+    if kind == "IndexError" and "with size 0" in message:
+        return "There are no rows here: the steps above don't keep any. Loosen a filter."
+    if kind == "TypeError" and "no numeric data to plot" in message:
+        return "This chart needs numbers, but the column has text or is empty."
+    if "requires a continuous x aesthetic" in message:
+        return "A histogram needs numbers, but this column is text. Pick a number column."
     if kind == "Timeout":
         return "Your program took too long. Is there a loop that never stops?"
     if kind == "SyntaxError":
