@@ -10,7 +10,7 @@ from blockcode.codegen.emitter import Emitter
 from blockcode.codegen.expr import (ExprError, PandasRenderer, checked_name, py_kwarg, py_str,
                                     whole)
 from blockcode.ir import TableInfo
-from blockcode.plan import Plan
+from blockcode.plan import Plan, can_be_empty
 
 PD_AGG = {"count": "count", "sum": "sum", "avg": "mean", "min": "min", "max": "max"}
 
@@ -94,10 +94,14 @@ def emit_group(em: Emitter, plan: Plan, out: str) -> None:
     for a in aggs:
         if a.get("func") == "count" and not a.get("column"):
             # COUNT(*) counts rows, empty or not: "size" on any column does the same.
-            col, fn = (others[0] if others else by[0]), "size"
+            col, fn = (others[0] if others else by[0]), py_str("size")
         else:
-            col, fn = a.get("column") or "", pd_agg(a)
-        em.emit(f"    {py_kwarg(a.get('as') or '', f'({py_str(col)}, {py_str(fn)})')},", g.id)
+            col, fn = a.get("column") or "", py_str(pd_agg(a))
+            if a.get("func") == "sum" and can_be_empty(plan, col):
+                # a group whose values are all empty sums to 0 in pandas but NULL in SQL;
+                # min_count=1 makes it <NA> to match. Only needed when the column has empties.
+                fn = "lambda x: x.sum(min_count=1)"
+        em.emit(f"    {py_kwarg(a.get('as') or '', f'({py_str(col)}, {fn})')},", g.id)
     em.emit(")", g.id)
 
 

@@ -130,6 +130,6 @@ Open `/?gallery` to see every hover animation at once.
 Known limits in v1:
 - A new column that a later Group by or Select drops has no SQL of its own. The validator warns
   about this.
-- `NOT IN` on a column with empty values and `SUM` over only-empty groups follow SQL in SQL, but
-  pandas and R return different results.
+- `NOT IN` on a column with empty values follows SQL in SQL, but pandas and R return different
+  results.
 - LIKE patterns with `%` or `_` in the middle, subqueries and window functions are not blocks yet.

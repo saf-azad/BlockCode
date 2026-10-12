@@ -57,6 +57,18 @@ def _strs(node: ast.AST) -> list[str]:
     raise Unsupported("expected column names here", getattr(node, "lineno", None))
 
 
+def _agg_func(node: ast.expr) -> str:
+    """The summary in a named aggregation: ``"sum"``, or ``lambda x: x.sum(min_count=1)``
+    (the sum BlockCode writes when a group's values can all be empty)."""
+    if isinstance(node, ast.Lambda) and len(node.args.args) == 1:
+        call, arg = node.body, node.args.args[0].arg
+        if isinstance(call, ast.Call) and not call.args and isinstance(call.func, ast.Attribute) \
+                and isinstance(call.func.value, ast.Name) and call.func.value.id == arg:
+            return call.func.attr
+        raise Unsupported("agg needs a summary like \"mean\" or lambda x: x.sum()", node.lineno)
+    return _const(node, str)
+
+
 def _kw(call: ast.Call, name: str) -> ast.AST | None:
     return next((k.value for k in call.keywords if k.arg == name), None)
 
@@ -370,7 +382,7 @@ class _PyParser:
         for alias, v in _kwargs(acall):
             if not (isinstance(v, ast.Tuple) and len(v.elts) == 2):
                 raise Unsupported("agg needs named summaries like avg=(\"col\", \"mean\")")
-            col, fn = _const(v.elts[0], str), _const(v.elts[1], str)
+            col, fn = _const(v.elts[0], str), _agg_func(v.elts[1])
             if fn not in AGG:
                 raise Unsupported(f'"{fn}" summary')
             aggs.append(b.agg(AGG[fn], None if fn == "size" else col, alias))

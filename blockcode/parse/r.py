@@ -674,6 +674,16 @@ class _RBlocks:
         raise Unsupported("join on one column with the same name in both tables", line)
 
     def _agg(self, alias: str, v: N) -> dict:
+        if v.kind == "if" and len(v.kids) == 3 and v.kids[1].kind == "const" \
+                and v.kids[1].value is None and _call_name(v.kids[2]) == "sum":
+            # if (all(is.na(x))) NA else sum(x, na.rm = TRUE): a sum that is NA, as in SQL,
+            # when there is nothing to add
+            cond, total = v.kids[0], self._agg(alias, v.kids[2])
+            inner = _pos(cond)[0] if _call_name(cond) == "all" and len(_pos(cond)) == 1 else None
+            if total["func"] == "sum" and inner is not None and _call_name(inner) == "is.na" \
+                    and len(_pos(inner)) == 1 and _names(_pos(inner)) == [total["column"]]:
+                return total
+            raise Unsupported("this summary", v.line)
         name = _call_name(v)
         if name == "n" and not v.args:
             return b.agg("count", None, alias)

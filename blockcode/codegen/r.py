@@ -11,7 +11,7 @@ from blockcode.codegen.emitter import Emitter, Generated
 from blockcode.codegen.expr import ExprError, RRenderer, one_line, py_str, r_ident, r_name, whole
 from blockcode.diagnostics import Diagnostic, error
 from blockcode.ir import Block, Program, TableInfo
-from blockcode.plan import Plan, build_plan
+from blockcode.plan import Plan, build_plan, can_be_empty
 
 GEOMS = {"bar": "geom_col()", "line": "geom_line(aes(group = 1)) + geom_point()",
          "scatter": "geom_point()"}
@@ -22,7 +22,8 @@ def generate_r(program: Program, tables: dict[str, TableInfo], quarto: bool = Tr
     return _RGen(program, tables, quarto, title).run()
 
 
-def _agg_r(a: dict) -> str:
+def _agg_r(a: dict, empty_sum: bool = False) -> str:
+    """One summarise() argument. ``empty_sum``: the summed values may all be empty (or none)."""
     func, column = a.get("func"), a.get("column")
     c = r_ident(column) if column else ""
     expr = {
@@ -34,6 +35,9 @@ def _agg_r(a: dict) -> str:
     }.get(func)
     if expr is None:  # the plan has already said why
         raise ExprError("Pick a summary: count, sum, avg, min or max.")
+    if func == "sum" and empty_sum:
+        # sum of no values is 0 in R but NULL in SQL, so give NA when there is nothing to add
+        expr = f"if (all(is.na({c}))) NA else {expr}"
     return f"{r_ident(a.get('as') or '')} = {expr}"
 
 
@@ -264,7 +268,10 @@ class _RGen:
             else:
                 if by:
                     verbs.append((f"group_by({', '.join(r_ident(k) for k in by)})", g.id))
-                parts = [_agg_r(a) for a in aggs]
+                # a whole-table summary can have no rows; a group always has one, so it
+                # only sums to nothing when its column has empties
+                parts = [_agg_r(a, not by or can_be_empty(plan, a.get("column") or ""))
+                         for a in aggs]
                 if len(by) > 1:
                     parts.append('.groups = "drop"')
                 one = f"summarise({', '.join(parts)})"

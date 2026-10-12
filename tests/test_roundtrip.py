@@ -96,3 +96,29 @@ def test_ids_are_kept(store, lang):
     # spans point at the line that holds the limit
     gen = generate(result.program, tables, lang)
     assert result.spans[lim.id] == gen.lines_for(lim.id)
+
+
+def test_sum_that_can_be_empty_round_trips(store):
+    # a sum that can have nothing to add is written so it stays empty, as in SQL; the parsers
+    # must still read that form back as a plain sum
+    tables = tables_for(store, "school/x")
+    grouped = b.program(b.from_("enrolments", b.group(["term"], b.agg("sum", "grade", "total"),
+                                                      b.agg("sum", "student_id", "ids"))))
+    whole = b.program(b.from_("enrolments", b.group([], b.agg("sum", "student_id", "ids"))))
+    expect = {
+        "python": ['total=("grade", lambda x: x.sum(min_count=1))', 'ids=("student_id", "sum")'],
+        "r": ["total = if (all(is.na(grade))) NA else sum(grade, na.rm = TRUE)",
+              "ids = sum(student_id, na.rm = TRUE)"],
+    }
+    for lang, snippets in expect.items():
+        code = generate(grouped, tables, lang).code
+        for s in snippets:
+            assert s in code, (lang, code)
+    assert "ids = if (all(is.na(student_id))) NA else sum(student_id, na.rm = TRUE)" in \
+        generate(whole, tables, "r").code  # a whole table can have no rows at all
+    for program in (grouped, whole):
+        for lang in LANGS:
+            result = parse_code(generate(program, tables, lang).code, lang, tables)
+            assert result.ok, result.diagnostics
+            assert not any(blk.type == "raw" for blk in result.program.walk()), lang
+            assert_same_code(program, result.program, tables)

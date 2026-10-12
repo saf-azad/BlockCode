@@ -295,3 +295,9 @@ def _label(b: Block) -> str:
 def nullable(plan: Plan, column: str) -> bool:
     c = plan.columns.get(column)
     return True if c is None else c.nullable
+
+
+def can_be_empty(plan: Plan, column: str) -> bool:
+    """Whether a column going into Group by can hold empty values (an unknown one can)."""
+    c = plan.pre_group.get(column)
+    return True if c is None else c.nullable

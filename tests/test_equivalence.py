@@ -4,6 +4,7 @@ import math
 
 import pytest
 
+from blockcode import build as b
 from blockcode.engine import run
 from tests.programs import pets, school
 
@@ -34,8 +35,6 @@ def compare(store, project_name, program):
     if sql.ok and sql.tables and sql.tables[-1].total_rows > len(sql.tables[-1].rows) \
             and not has_order(program):
         # Only the first rows come back; fix the order so both sides return the same ones.
-        from blockcode import build as b
-
         program = program.model_copy(deep=True)
         steps = program.blocks[-1].stacks["steps"]
         steps.append(b.order(*[(c, False) for c in sql.tables[-1].columns]))
@@ -112,3 +111,35 @@ def test_r_null_semantics_match_sql(store, name):
     else:
         key = lambda r: tuple((x is None, str(x)) for x in r)  # noqa: E731
         assert sorted(sql_rows, key=key) == sorted(r_rows, key=key)
+
+
+def sum_over_all_empty_group():
+    # calc is empty exactly when grade is, so the group whose key is empty has 5 rows and no
+    # grades: SUM is NULL there in SQL, and pandas and R must not turn it into 0
+    return b.program(b.from_(
+        "enrolments",
+        b.derive("calc", b.math("+", b.col("grade"), b.lit(1))),
+        b.where(b.cmp("=", b.col("term"), b.lit("S1"))),
+        b.group(["calc"], b.agg("count", None, "n"), b.agg("sum", "grade", "sum_0")),
+        b.having(b.cmp(">", b.col("n"), b.lit(2))),
+    ))
+
+
+def test_sum_over_all_empty_group(store):
+    rows = compare(store, "school", sum_over_all_empty_group())
+    assert (None, 5, None) in rows
+
+
+@needs_r
+def test_r_sum_over_all_empty_group(store):
+    project = store.load("school")
+    program = sum_over_all_empty_group()
+    sql_cols, sql_rows = rows_of(run(store, project, program, "sql"))
+    r_cols, r_rows = rows_of(run(store, project, program, "r"))
+    assert sql_cols == r_cols
+
+    def key(r):
+        return tuple((x is None, str(x)) for x in r)
+
+    assert sorted(sql_rows, key=key) == sorted(r_rows, key=key)
+    assert (None, 5, None) in r_rows
