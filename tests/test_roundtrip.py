@@ -39,6 +39,11 @@ def imperative():
             b.plot("scatter", "out", "n", "avg_grade"),
             b.plot("hist", "out", "avg_grade"),
         ),
+        "plot_in_loop": b.program(
+            b.from_("enrolments", b.join("courses", "course_id"),
+                    b.group(["dept"], b.agg("avg", "grade", "avg_grade"))),
+            b.repeat("i", b.lit(2), b.plot("bar", "out", "dept", "avg_grade")),
+        ),
     }
 
 

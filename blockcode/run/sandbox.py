@@ -83,13 +83,21 @@ class Captured(NamedTuple):
     too_much: bool  # stopped for printing (or writing) too much
 
 
+CUT = "\n… (the rest of the output was cut)\n"
+
+
+def clip(text: str, more: bool = False) -> str:
+    """Printed output as it is sent back: at most MAX_OUTPUT_CHARS, saying so when it was cut
+    (``more``: the caller already dropped some)."""
+    if len(text) > MAX_OUTPUT_CHARS or more:
+        return text[:MAX_OUTPUT_CHARS] + CUT
+    return text
+
+
 def _head(path: Path) -> str:
     with open(path, "rb") as f:
         raw = f.read(MAX_OUTPUT_CHARS * 4 + 1)
-    text = raw.decode("utf-8", errors="replace")
-    if len(text) > MAX_OUTPUT_CHARS or path.stat().st_size > len(raw):
-        text = text[:MAX_OUTPUT_CHARS] + "\n… (the rest of the output was cut)\n"
-    return text
+    return clip(raw.decode("utf-8", errors="replace"), more=path.stat().st_size > len(raw))
 
 
 def run_captured(cmd: list[str], cwd: Path, timeout: float, env: dict[str, str],

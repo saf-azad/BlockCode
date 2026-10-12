@@ -228,15 +228,20 @@ class _RGen:
             bins = whole(b.field("bins") or 5)
             if not bins:
                 raise ExprError("The number of bins needs to be a whole number.", b.id)
-            self.em.emit(f"ggplot({data}, aes(x = {r_ident(x)})) +", b.id)
-            self.em.emit(f"  geom_histogram(bins = {bins})", b.id)
-            return
-        if chart not in GEOMS:
-            raise ExprError("Pick a chart type: bar, line, scatter or hist.", b.id)
-        if not y:
-            raise ExprError("Pick a column for the y axis.", b.id)
-        self.em.emit(f"ggplot({data}, aes(x = {r_ident(x)}, y = {r_ident(y)})) +", b.id)
-        self.em.emit(f"  {GEOMS[chart]}", b.id)
+            head = f"ggplot({data}, aes(x = {r_ident(x)}))"
+            geom = f"geom_histogram(bins = {bins})"
+        else:
+            if chart not in GEOMS:
+                raise ExprError("Pick a chart type: bar, line, scatter or hist.", b.id)
+            if not y:
+                raise ExprError("Pick a column for the y axis.", b.id)
+            head = f"ggplot({data}, aes(x = {r_ident(x)}, y = {r_ident(y)}))"
+            geom = GEOMS[chart]
+        # R only draws a ggplot by itself at the top level; inside a loop it has to be printed
+        if self.em.depth > 0:
+            head, geom = f"print({head}", f"{geom})"
+        self.em.emit(f"{head} +", b.id)
+        self.em.emit(f"  {geom}", b.id)
 
     # ---- pipelines ---------------------------------------------------------------------------
 

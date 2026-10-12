@@ -38,12 +38,17 @@ BlockCode teaches the ideas once, as blocks, and shows how each language spells 
   test suite checks that SQL, pandas and R return the same table for every example program.
 - **Hover to learn.** Hovering a block highlights the lines it wrote and shows that step in all
   three languages at once. A small animation shows what it does to the rows.
+- **Python and R run in your browser.** They run on the visitor's own machine through Pyodide and
+  webR (Python and R compiled to WebAssembly), so there's nothing to install and R works even
+  on a host without it. If either can't start, the run falls back to the server.
 - **Errors point at blocks.** A Python traceback or an R error is traced back through a source map
   to the block that caused it, in plain English: *"best is used before it has a value."*
 - **Messy CSVs welcome.** Other encodings, semicolons, `NA` / `N/A` / `null`, `1,234`, decimal
   commas and ragged rows are all tidied on the way in, so every language reads the same table.
 - **Private by design.** The server keeps nothing. Each visitor's work is saved in their own
   browser.
+- **Plots that don't break.** Before running, plot settings are checked: a text column where a
+  chart needs numbers, a column that's gone, or one bar for each of thousands of rows.
 - **Take the code with you.** Export a standalone `.sql`, `.py`, or `.R` / `.qmd` with its data.
   It runs without BlockCode.
 
@@ -85,14 +90,18 @@ pandas, and a small hand-written Pratt parser for R.
 
 ## Engineering highlights
 
-- **Correctness by cross-checking.** Nearly 400 engine tests, many of them checking that languages
+- **Correctness by cross-checking.** Over 400 engine tests, many of them checking that languages
   and directions agree with each other. [Hypothesis](https://hypothesis.readthedocs.io) generates
   random pipelines and asserts that `parse(generate(P))` regenerates identical code in every
   language, and that SQL and pandas return the same rows. Golden files cover every example, and
-  10 Playwright journeys drive the real app end to end.
+  15 Playwright tests drive the real app end to end.
 - **The animations are tested too.** Each hover animation's story lives in a JSON file. A test
   runs the same story through the real engine and checks that the rows the animation shows are
   the rows the engine returns.
+- **One harness, two runtimes.** A Python or R run in the browser uses the same harness as a run
+  on the server, and its raw output goes back to the server only to be explained (errors mapped
+  to blocks, tables typed). Tests run every job through a stand-in browser and check it matches
+  a server run exactly.
 - **Stable identity across re-parses.** As you type, newly parsed blocks are matched to the
   existing ones by slot, type and position, so hover state and settings survive every keystroke.
 - **Stateless, privacy-first backend.** Runs and exports carry their (gzipped) CSVs. The server
@@ -100,9 +109,9 @@ pandas, and a small hand-written Pratt parser for R.
   database, nothing leaks between visitors, and it scales out on serverless hosts.
 - **Careful with untrusted code.** Every program is shape-checked before any code is written,
   and every value from a block reaches the code as a quoted literal or a checked identifier. SQL
-  runs on a read-only, time-limited connection. Python and R run in subprocesses with a clean
-  environment and CPU, time, file-size and output limits. Running free-typed code is off by
-  default on public deployments.
+  runs on a read-only, time-limited connection. Python and R run in the visitor's browser
+  sandbox. When they run on the server instead, they get a subprocess with a clean environment
+  and CPU, time, file-size and output limits, and free-typed code is refused by default.
 
 ## Tech stack
 
@@ -111,6 +120,7 @@ pandas, and a small hand-written Pratt parser for R.
 | **Engine** | Python 3.11+, pydantic, sqlglot, pandas, matplotlib, SQLite |
 | **API / CLI** | FastAPI, uvicorn, Typer |
 | **Editor** | React 19, TypeScript, Vite, CodeMirror 6, dnd-kit |
+| **In-browser runtimes** | Pyodide (Python), webR (R), Web Workers |
 | **Testing** | pytest, Hypothesis, Vitest, Playwright |
 | **Tooling** | uv, ruff, GitHub Actions, Docker, Vercel |
 
@@ -124,8 +134,10 @@ uv sync                                   # Python engine + server
 uv run blockcode serve                    # open http://127.0.0.1:8000
 ```
 
-R is optional. R code is always generated and exported, and it runs when `Rscript` (with dplyr,
-readr, stringr and ggplot2) is installed. To try it with sample data, upload the CSVs in
+Python and R run in the browser, so a local install needs neither for the editor. The first run
+in each language downloads Pyodide or webR and the packages it uses. Set
+`BLOCKCODE_RUN_IN=server` to run them on this machine instead; R then needs `Rscript` with
+dplyr, readr, stringr and ggplot2. To try BlockCode with sample data, upload the CSVs in
 [`blockcode/data/sample/`](blockcode/data/sample).
 
 ## Development
@@ -151,7 +163,8 @@ blockcode/            Python engine
   plan.py               From stack → relational plan, with column tracking
   codegen/              plan → SQL, pandas, dplyr (+ source maps)
   parse/                SQL, Python, R → IR; match.py keeps block ids stable
-  run/                  runners and subprocess limits
+  engine.py             check, run here, or prepare a run for the browser
+  run/                  runners (run + interpret) and subprocess limits
   data_io.py            CSV tidying and type inference
   server.py cli.py      FastAPI app and the command line
 web/src/              React editor
@@ -159,6 +172,7 @@ web/src/              React editor
   code/                 the CodeMirror panel
   panels/ sidebar/      output, plots, problems; tables and the ERD
   explainers/           the hover animations
+  runtime/              Python (Pyodide worker) and R (webR) in the browser
 tests/                pytest suites, golden files and fixtures
 docs/                 architecture notes, screenshots and the original design mockup
 ```
@@ -167,24 +181,31 @@ docs/                 architecture notes, screenshots and the original design mo
 
 ## Deploying
 
-**Docker (all three languages).** The `Dockerfile` builds one image with the editor, the engine
-and R. It listens on `$PORT` (default 8000), so it suits Render, Railway, Fly.io, Cloud Run or
-any VPS.
+**Docker.** The `Dockerfile` builds one image with the editor, the engine and R (for the server
+fallback). It listens on `$PORT` (default 8000), so it suits Render, Railway, Fly.io, Cloud Run
+or any VPS.
 
 ```bash
 docker build -t blockcode . && docker run -p 8000:8000 blockcode
 ```
 
-**Vercel (SQL and Python).** `pyproject.toml` points Vercel at the FastAPI app, and its build
-script compiles the editor into `public/`, so importing the repository into Vercel is all it
-takes. Vercel has no R, so there the R tab shows and exports code but can't run it.
+**Vercel.** `pyproject.toml` points Vercel at the FastAPI app, and its build script compiles the
+editor into `public/`, so importing the repository into Vercel is all it takes. Vercel has no
+R, but R runs in the visitor's browser, so all three languages work.
+
+**Configuration.** `BLOCKCODE_RUN_IN=server` runs Python and R on the host instead of in the
+browser. `BLOCKCODE_PYODIDE_URL`, `BLOCKCODE_WEBR_URL` and `BLOCKCODE_WEBR_REPO` point the
+browser at your own copies of Pyodide, webR and its package repository (by default, their
+public CDNs).
 
 ## Limits and safety
 
 - A CSV can be up to 10 MB. Results show the first 200 rows. SQL and Python stop after 10
-  seconds, and R after 20. A run returns at most 12 plots and 100,000 characters of output.
-- Code typed in the Python or R tab can include lines that aren't blocks. Running those means
-  running arbitrary code on the server, so `/api/run` refuses programs with a Code block unless
+  seconds and R after 20; in the browser, where WebAssembly is slower, Python and R get twice as
+  long. A run returns at most 12 plots and 100,000 characters of output.
+- Code typed in the Python or R tab can include lines that aren't blocks (Code blocks). In the
+  browser they run like any other code, in the visitor's own sandbox. On the server, running
+  them means running arbitrary code, so `/api/run` refuses programs with a Code block unless
   `BLOCKCODE_ALLOW_RAW_CODE=1` is set. Only set it on a trusted or sandboxed host. Programs
   built only from blocks always run.
 - For a public deployment, add a rate limit on `/api/*` (for example a Vercel Firewall rule of 20

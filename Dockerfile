@@ -1,4 +1,5 @@
-# BlockCode in one image: the web editor, the engine, and R (so all three languages run).
+# BlockCode in one image: the web editor, the engine, and R. Python and R run in the visitor's
+# browser; R here is for the server fallback (BLOCKCODE_RUN_IN=server, or a browser that can't).
 # Works on any host that runs containers (Render, Railway, Fly.io, Cloud Run, a VPS):
 #   docker build -t blockcode . && docker run -p 8000:8000 blockcode
 

@@ -32,9 +32,10 @@ export interface State {
   tab: Tab;
   run: RunResult | null;
   running: boolean;
+  runNote: string | null; // what a run is waiting on ("Installing ggplot2…")
   editing: Editing | null;
   saved: 'saved' | 'saving' | 'unsaved';
-  rReady: boolean; // R can run on this server
+  rReady: boolean; // R can run (in this browser, or on the server)
   canSave: boolean; // this browser keeps the workspace between visits
   dropping: boolean;
   uploading: number; // files being read right now
@@ -58,6 +59,7 @@ export const initialState: State = {
   tab: 'code',
   run: null,
   running: false,
+  runNote: null,
   editing: null,
   saved: 'saved',
   rReady: true,
@@ -87,6 +89,7 @@ export type Action =
   | { type: 'focus'; id: string | null }
   | { type: 'tab'; tab: Tab }
   | { type: 'running' }
+  | { type: 'runnote'; text: string | null }
   | { type: 'ran'; run: RunResult }
   | { type: 'edit'; text: string }
   | { type: 'parsed'; parse: ParseResult; text: string }
@@ -168,10 +171,13 @@ export function reducer(s: State, a: Action): State {
     case 'tab':
       return { ...s, tab: a.tab };
     case 'running':
-      return { ...s, running: true };
+      // pressing Run shows the result tab at once, so a first run can say what it's waiting on
+      return { ...s, running: true, runNote: null, tab: s.tab === 'plot' ? 'plot' : 'output' };
+    case 'runnote':
+      return s.running ? { ...s, runNote: a.text } : s;
     case 'ran':
       return {
-        ...s, running: false, run: a.run,
+        ...s, running: false, runNote: null, run: a.run,
         tab: a.run.ok && a.run.plots.length && !a.run.tables.length && !a.run.stdout ? 'plot' : 'output',
       };
     case 'edit': {

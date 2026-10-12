@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from './api';
 import { loadWorkspace, persistent, saveMeta } from './local';
+import { warm } from './runtime';
 import { Panel } from './panels/Panel';
 import { ErdPanel } from './sidebar/Erd';
 import { Sidebar } from './sidebar/Sidebar';
@@ -30,7 +31,9 @@ function useEngine() {
           program: saved.meta?.program ?? { blocks: [] },
         };
         const files = Object.fromEntries(saved.tables.map((t) => [t.info.name, t.data]));
-        dispatch({ type: 'loaded', project, files, specs: map, rReady: !!health?.r, canSave });
+        // R runs in this browser (webR) unless the server says to run it there
+        const rReady = !!health?.r || health?.run_in === 'browser';
+        dispatch({ type: 'loaded', project, files, specs: map, rReady, canSave });
       })
       .catch((e) => dispatch({ type: 'error', message: (e as Error).message }));
   }, [dispatch, attempt]);
@@ -76,6 +79,15 @@ function useEngine() {
       document.removeEventListener('visibilitychange', onHide);
     };
   }, [state.saved, state.program, state.project, tables, title]);
+
+  // Python and R run in the browser: start downloading them as soon as their tab is picked
+  const code = state.generated?.[lang]?.code;
+  const codeRef = useRef(code);
+  codeRef.current = code;
+  const haveCode = code !== undefined;
+  useEffect(() => {
+    if (lang !== 'sql' && haveCode) warm(lang, codeRef.current ?? '');
+  }, [lang, haveCode]);
 
   useEffect(() => applyTheme(lang), [lang]);
 
