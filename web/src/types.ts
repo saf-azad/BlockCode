@@ -84,6 +84,34 @@ export interface RunResult {
   error: RunError | null;
 }
 
+/** Where Python and R run, and where the browser loads them from (GET /api/runtime). */
+export interface RuntimeConfig {
+  run_in: 'browser' | 'server';
+  pyodide: string;
+  webr: string;
+  webr_repo: string;
+}
+
+/** A program ready to run in the browser (POST /api/job). */
+export interface Job {
+  target: 'python' | 'r';
+  code: string;
+  harness: string;
+  names: string[];
+  files: { path: string; text: string }[]; // the tidied CSVs the code reads
+  timeout: number; // seconds
+}
+
+/** What running a Job produced, sent back to be turned into a RunResult (POST /api/finish). */
+export interface Raw {
+  stdout: string;
+  cut?: boolean; // printed output past the limit was dropped
+  timed_out: boolean;
+  data?: Record<string, unknown> | null; // Python: the harness's result.json
+  files?: Record<string, string>; // R: the harness's output files
+  plots?: string[]; // R: every plot page as base64 PNG
+}
+
 export interface ParseResult {
   ok: boolean;
   lang: Lang;

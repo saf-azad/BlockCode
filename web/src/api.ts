@@ -1,5 +1,5 @@
 import type { StoredTable } from './local';
-import type { BlockSpec, Erd, Generated, Lang, ParseResult, Program, RunResult, TableInfo } from './types';
+import type { BlockSpec, Erd, Generated, Job, Lang, ParseResult, Program, Raw, RunResult, RuntimeConfig, TableInfo } from './types';
 
 async function call<T>(url: string, init?: RequestInit): Promise<T> {
   let res: Response;
@@ -40,6 +40,7 @@ export interface Health {
   version: string;
   r: boolean;
   max_file: number;
+  run_in: RuntimeConfig['run_in'];
 }
 
 export const api = {
@@ -57,6 +58,13 @@ export const api = {
   erd: (tables: TableInfo[]) => call<Erd>('/api/erd', json({ tables })),
   run: (program: Program, target: Lang, tables: StoredTable[]) =>
     call<RunResult>('/api/run', withData({ program, target }, tables)),
+  runtime: () => call<RuntimeConfig>('/api/runtime'),
+  /** Python or R to run in this browser: the code and tidied CSVs, or why it can't run. */
+  job: (program: Program, target: Lang, tables: StoredTable[]) =>
+    call<{ job?: Job; result?: RunResult }>('/api/job', withData({ program, target }, tables)),
+  /** Turn what a run in this browser produced into a result (friendly errors, their blocks). */
+  finish: (program: Program, target: Lang, tables: TableInfo[], raw: Raw) =>
+    call<RunResult>('/api/finish', json({ program, target, tables, raw })),
   export: async (program: Program, target: Lang, title: string, tables: StoredTable[]) => {
     let res: Response;
     try {

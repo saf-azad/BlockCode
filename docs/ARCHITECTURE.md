@@ -26,6 +26,7 @@ flowchart LR
     WS[Block workspace<br/>React + dnd-kit]
     CM[Code editor<br/>CodeMirror 6]
     IDB[(IndexedDB<br/>tables + blocks)]
+    WASM[Python + R<br/>Pyodide / webR]
   end
 
   subgraph Engine["Engine (Python)"]
@@ -33,7 +34,7 @@ flowchart LR
     PLAN[Relational plan]
     GEN[Code generators<br/>SQL / pandas / dplyr]
     PARSE[Parsers<br/>sqlglot / ast / Pratt]
-    RUN[Runners<br/>sqlite3 / python / Rscript]
+    RUN[Runners<br/>sqlite3, + python / Rscript fallback]
   end
 
   WS -- program --> IR
@@ -41,13 +42,15 @@ flowchart LR
   GEN -- code + source map --> CM
   CM -- typed code --> PARSE --> IR
   IR --> RUN
+  IR -- job --> WASM -- raw output --> RUN
   WS <--> IDB
 ```
 
 Blocks and code are two views of one **Program IR**. Every change to the blocks is sent to the
 engine, which writes the code for all three languages at once. Every pause while typing in the
-code editor sends the text back, and the engine parses it into a new IR. The server keeps nothing
-between requests, so all of this works the same on a laptop as on a serverless host.
+code editor sends the text back, and the engine parses it into a new IR. SQL runs on the server;
+Python and R run in the visitor's browser. The server keeps nothing between requests, so all of
+this works the same on a laptop as on a serverless host.
 
 | Path | What lives there |
 | --- | --- |
@@ -57,10 +60,12 @@ between requests, so all of this works the same on a laptop as on a serverless h
 | `blockcode/parse/` | SQL, Python and R → IR, plus `match.py`, which keeps block ids stable |
 | `blockcode/shape.py` | Checks a program is well formed (block types, kinds of setting, size) before any code is written |
 | `blockcode/validate.py`, `errors.py` | Per-language problems and plain-English error messages |
-| `blockcode/run/` | Runners for each language, and the subprocess limits in `sandbox.py` |
+| `blockcode/engine.py` | Checks a program, runs it here, or prepares a run for the browser and explains its outcome |
+| `blockcode/run/` | Runners for each language (each split into run and interpret), and the subprocess limits in `sandbox.py` |
 | `blockcode/data_io.py` | Tidies an uploaded CSV, infers column types, loads it into SQLite |
 | `blockcode/server.py`, `cli.py` | The FastAPI app and the `blockcode` command line |
 | `web/src/` | The editor: `stack/` (blocks), `code/`, `panels/`, `sidebar/`, `explainers/` |
+| `web/src/runtime/` | Python (Pyodide, in a Web Worker) and R (webR) in the browser, with a fallback to the server |
 
 ## The Program IR
 
@@ -164,9 +169,11 @@ and is the program a sensible size and depth? A malformed block becomes a proble
 and every value that reaches the generated code is a quoted literal or a checked identifier.
 
 `validate.py` then merges the problems reported while building the plan and generating code with
-checks of its own. For example, a variable used before it is set, or a name that isn't a valid
-Python identifier. Every problem is attached to a block id. The editor shows it in the Problems
-tab and outlines the block.
+checks of its own. For example, a variable used before it is set, a name that isn't a valid
+Python identifier, or a plot that would crash or hang: a text column where the chart needs
+numbers, a column the rows no longer have, or one bar for each of thousands of rows. Every
+problem is attached to a block id. The editor shows it in the Problems tab and outlines the
+block, and a run stops on any problem marked as an error before running anything.
 
 Runtime errors are translated too (`errors.py`). An SQLite `no such column` and a pandas
 `KeyError` both become "There is no column called grade at this point." The raw error stays
@@ -174,16 +181,45 @@ available underneath.
 
 ## Running code
 
-| Language | How it runs | Wall-clock limit |
-| --- | --- | --- |
-| SQL | `sqlite3`, against a **read-only** connection (`?mode=ro`); a progress handler stops it from inside, and it fetches 200 rows while counting the rest | 10 s |
-| Python | the exact exported script in a subprocess, inside a small harness | 10 s |
-| R | `Rscript`, when installed (Quarto chunks are extracted first) | 20 s |
+| Language | Where it runs | How | Wall-clock limit |
+| --- | --- | --- | --- |
+| SQL | server | `sqlite3`, against a **read-only** connection (`?mode=ro`); a progress handler stops it from inside, and it fetches 200 rows while counting the rest | 10 s |
+| Python | the visitor's browser | [Pyodide](https://pyodide.org) in a Web Worker, so a long program never freezes the page | 20 s |
+| R | the visitor's browser | [webR](https://docs.r-wasm.org/webr/), with packages installed from the webR repository on first use | 40 s |
+| Python, R (fallback) | server | a subprocess (`python`, or `Rscript` when installed) | 10 s, 20 s |
 
-The Python and R harnesses save plots to files instead of opening windows, report the final
-value of each pipeline variable as a table, and turn a traceback into a line number. The source
-map then turns that line into a block. Results are capped at 200 rows shown, 12 plots and 100,000
-characters of printed output.
+Each language has a **harness**: a small script around the learner's code that saves plots as
+pictures instead of opening windows, reports the final value of each pipeline variable as a
+table, and turns a traceback into a line number. The same harness runs in both places. On the
+server, `run_python` and `run_r` run it in a subprocess. In the browser, Pyodide or webR runs it
+on the visitor's machine. Either way, its raw output goes through the runner's `interpret()`,
+which maps the error line back to its block (through the source map), types the table cells
+and applies the limits: 200 rows shown, 12 plots and 100,000 characters of printed output.
+
+```mermaid
+sequenceDiagram
+  participant B as Browser
+  participant W as Pyodide / webR
+  participant S as Server
+  B->>S: POST /api/job (program + gzipped CSVs)
+  S-->>B: code, harness, tidied CSVs (or the problem that stops it)
+  B->>W: write the CSVs, run the harness
+  W-->>B: stdout, result files, plot pages
+  B->>S: POST /api/finish (program + raw output)
+  S-->>B: result, with the error mapped to its block
+```
+
+R plots go to a real picture device (a PNG file on the server, webR's canvas in the browser),
+and the harness counts pages with grid and base-graphics hooks. So a plot shows however it's
+drawn: a ggplot at the top level, one printed inside a loop, or base graphics. A plot that fails
+half way leaves no blank picture behind. (Hooking `print.ggplot` instead, the obvious approach,
+silently misses ggplot2 4, whose plots are S7 objects.)
+
+The first run in each language downloads Pyodide or webR, then the packages the program uses
+(pandas and matplotlib, or dplyr, readr and ggplot2). Switching to the Python or R tab starts
+these downloads early, and the Output panel says what a run is waiting on. If Python or R can't
+start in a browser (offline, a blocked CDN, an old browser), the run falls back to the server
+and says so.
 
 `run/sandbox.py` adds light guards for the subprocesses:
 
@@ -196,7 +232,9 @@ characters of printed output.
 
 This is **not** a full sandbox, so running free-typed **Code** blocks on the server is off by
 default (`BLOCKCODE_ALLOW_RAW_CODE=1` turns it on). Programs built only from blocks can only
-express what the generators emit, so they are always allowed to run.
+express what the generators emit, so they are always allowed to run. In the browser, Code blocks
+run like everything else: the code runs in the visitor's own sandbox, so nothing on the server
+is at stake.
 
 ## CSV ingest
 
@@ -231,13 +269,16 @@ sequenceDiagram
 
 | Endpoint | Purpose |
 | --- | --- |
-| `GET /api/health` | version, and whether R can run here |
+| `GET /api/health` | version, whether R can run here, and where Python and R run |
+| `GET /api/runtime` | where Python and R run, and the Pyodide, webR and package-repository URLs |
 | `GET /api/blocks` | block specs; the editor builds its palette from these |
 | `POST /api/tables` | tidy and inspect an uploaded CSV (column types, empty counts, changes made) |
 | `POST /api/generate-all` | code, source map and problems for all three languages at once |
 | `POST /api/parse` | code → program, with line spans and diagnostics |
 | `POST /api/erd` | inferred links between tables |
-| `POST /api/run` | run the program in the chosen language |
+| `POST /api/run` | run the program here in the chosen language |
+| `POST /api/job` | a Python or R run for the browser: the code, the harness and the tidied CSVs |
+| `POST /api/finish` | turn what a browser run produced into a result, errors mapped to blocks |
 | `POST /api/export` | a zip of standalone code plus the data it needs |
 
 The only state is in the browser. Requests that need data carry their CSVs, gzipped by the
@@ -247,8 +288,9 @@ browser. The server builds a throwaway workspace, uses it and deletes it. This g
 - There is no database to run or back up.
 - Any number of instances can serve one visitor, which is what makes the Vercel deploy work.
 
-The cost is bandwidth: a run re-sends the tables it uses. Vercel limits a request to 4.5 MB,
-which is still several CSVs of a few MB each once gzipped.
+The cost is bandwidth: a run re-sends the tables it uses, and a browser run gets the tidied
+tables back (gzipped by the server). Vercel limits a request to 4.5 MB, which is still several
+CSVs of a few MB each once gzipped.
 
 ## The editor
 
@@ -279,7 +321,7 @@ The web app (`web/`) is React 19 + TypeScript, built with Vite.
 
 ## How it is tested
 
-The engine has nearly 400 tests. Most of them check that the three languages and the two directions
+The engine has over 400 tests. Most of them check that the three languages and the two directions
 agree with each other, more than checking any one output:
 
 | Suite | What it checks |
@@ -294,12 +336,17 @@ agree with each other, more than checking any one output:
 | `test_awkward_csvs.py` | messy real-world CSVs are tidied, and every language then reads the same table |
 | `test_explainers.py` | every hover animation shows what the engine really does (e.g. inner join 3 + 3 → 2 rows) |
 | `test_export.py` | exported files run on their own, outside BlockCode |
+| `test_browser_jobs.py` | a stand-in browser runs every job exactly as handed over, and must get the same result as a run on the server |
+| `test_plots.py` | bad plot settings are problems on the block; R draws plots made any way (loops, ggplot2 3 or 4); failures leave no blank picture |
 | `test_server.py`, `test_cli.py` | the API and the command line |
 
-On the web side, Vitest covers the IR helpers and the animation scenes. Playwright runs 10
-end-to-end journeys against the real engine: upload, build, switch language, run, type code,
-drag and drop, export, and error → block links. CI runs lint, the engine tests (with R
-installed), the web build and unit tests, and the browser tests on every pull request.
+On the web side, Vitest covers the IR helpers and the animation scenes. Playwright runs 15
+end-to-end tests against the real engine: upload, build, switch language, run, type code, drag
+and drop, export, and error → block links. Two of them cover the browser runtime: one checks
+that runs fall back to the server when Pyodide and webR can't be downloaded, and one runs Python
+and R for real in the browser, plots and all, where the CDNs are reachable (as in CI). CI runs
+lint, the engine tests (with R installed), the web build and unit tests, and the browser tests
+on every pull request.
 
 ## Design decisions
 
@@ -311,7 +358,9 @@ installed), the web build and unit tests, and the browser tests on every pull re
 | A hand-written R parser | Parsing must work where R isn't installed (Vercel), so asking R itself is out. The dplyr subset is small enough for a Pratt parser in about 800 lines, with errors phrased for learners. | Unusual R syntax falls back to a raw Code block. |
 | A stateless server with workspaces kept in the browser | Privacy by construction, no database, and it scales out on serverless hosts. | Each run re-uploads its tables. Work lives in one browser unless exported. |
 | Tidy every CSV once on the way in | One tidy file means SQLite, pandas and readr agree without three sets of reader options. | Dates stay text for now. |
-| Free-typed code is off by default on the server | The subprocess limits are guards, not isolation. | Raw Code blocks run only on trusted hosts (a local install, the Docker image with the flag set). |
+| Run Python and R in the visitor's browser (WebAssembly) | Nothing to install, R works on hosts without it (Vercel), and untrusted code runs in the visitor's own sandbox, not the server's. | The first run downloads tens of MB, and WebAssembly is slower than native. The server stays as a fallback. |
+| One harness, interpreted on the server | The browser and the server run the same harness, and the server explains both outputs the same way, so the two can't drift apart. | Every browser run makes two requests (`/job`, `/finish`). |
+| Free-typed code is off by default on the server | The subprocess limits are guards, not isolation. | On the server, raw Code blocks run only on trusted hosts (a local install, the Docker image with the flag set). They always run in the browser. |
 
 ## Limits and next steps
 
@@ -326,7 +375,9 @@ What comes next:
 
 - **Not yet blocks:** subqueries and CTEs, window functions, CASE, LIKE patterns with `%` or `_`
   in the middle, functions, and date types.
-- **R runs only where `Rscript` exists**, which includes the Docker image but not Vercel. Running
-  Python and R in the browser (Pyodide / webR) would remove the server from the run path
-  entirely.
+- **Keep the tidied CSVs in the browser.** Browser runs still send each table to the server to
+  be tidied and get it back. Storing the tidied file at upload time would let Python and R runs
+  skip that round trip, so the data would never leave the browser for a run.
+- **Auto-run.** Re-run after each edit once the first run is done, keeping results in step with
+  the blocks.
 - **A compare mode** that runs all three languages side by side and shows that the results match.

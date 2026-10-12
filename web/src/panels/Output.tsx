@@ -7,7 +7,13 @@ export function Output() {
   const run = state.run;
   const doRun = useRun();
   const lang = effectiveLang(state);
-  if (state.running) return <div className="status" style={{ animation: 'pulse 1s infinite' }}>Running {LANG_LABEL[lang]}…</div>;
+  if (state.running) {
+    return (
+      <div className="status" style={{ animation: 'pulse 1s infinite' }} data-testid="run-note">
+        {state.runNote ?? `Running ${LANG_LABEL[lang]}…`}
+      </div>
+    );
+  }
   if (!run) {
     if (!state.program.blocks.length) {
       return <div className="placeholder" style={{ marginTop: 18 }}>Add some blocks, then press Run to see the result here.</div>;
@@ -15,7 +21,7 @@ export function Output() {
     if (lang === 'r' && !state.rReady) {
       return (
         <div className="placeholder" style={{ marginTop: 18 }}>
-          R isn't installed on this server, so R code can't run here.<br />Export the .qmd and open it in RStudio, or run the same blocks as:
+          R can't run here: this server has no R, and R can't start in this browser.<br />Export the .qmd and open it in RStudio, or run the same blocks as:
           <span style={{ display: 'flex', gap: 8 }}>
             <button className="btn small" onClick={() => dispatch({ type: 'lang', lang: 'sql' })}>SQL</button>
             <button className="btn small" onClick={() => dispatch({ type: 'lang', lang: 'python' })}>Python</button>
@@ -38,7 +44,7 @@ export function Output() {
         {run.ok ? `Ran as ${LANG_LABEL[run.target]}${rows ? ` · ${rows}` : ''}${run.plots.length ? ` · ${run.plots.length} plot${run.plots.length > 1 ? 's' : ''}` : ''}`
           : `${LANG_LABEL[run.target]} stopped with a problem`}
         {run.target !== lang && (lang === 'r' && !state.rReady
-          ? ` · R can't run on this server, so this is the ${LANG_LABEL[run.target]} result`
+          ? ` · R can't run here, so this is the ${LANG_LABEL[run.target]} result`
           : ' · the language has changed since, press Run again')}
       </div>
       {run.error && (
