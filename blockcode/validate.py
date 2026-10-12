@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import keyword
-
 from blockcode.codegen import generate
+from blockcode.codegen.expr import name_problem
 from blockcode.diagnostics import Diagnostic, error, warning
 from blockcode.ir import Block, Program, TableInfo
 
@@ -27,9 +26,6 @@ def validate(program: Program, tables: dict[str, TableInfo], target: str,
     return out
 
 
-PY_TAKEN = {"pd", "plt", "np"}  # the generated Python already uses these
-
-
 def check_names(program: Program) -> list[Diagnostic]:
     """Result, variable and loop names become Python variables, so they must be valid ones."""
     diags: list[Diagnostic] = []
@@ -39,10 +35,9 @@ def check_names(program: Program) -> list[Diagnostic]:
                 "repeat": b.field("var")}.get(b.type)
         if not isinstance(name, str) or not name:
             continue
-        if not name.isidentifier() or keyword.iskeyword(name) or name in PY_TAKEN:
-            diags.append(error(f'"{name}" can\'t be a name in Python. Pick another one that '
-                               f"starts with a letter and isn't a Python word like for or "
-                               f"class.", b.id))
+        problem = name_problem(name)
+        if problem:
+            diags.append(error(problem, b.id))
     return diags
 
 

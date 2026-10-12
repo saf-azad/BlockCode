@@ -31,6 +31,10 @@ def friendly(kind: str, message: str, target: str) -> str:
             return f"There is no column or field called {m.group(1)} on that row."
     if kind == "TypeError" and ("unsupported operand" in message or "can only concatenate" in message):
         return "These values can't be combined: check you aren't mixing text and numbers."
+    if kind == "Timeout" and target == "sql":
+        return ("This query took too long, so it was stopped. A join on a column with many "
+                "repeated values can make a huge number of rows: check the JOIN key, or add a "
+                "WHERE block before it.")
     if kind == "Timeout":
         return "Your program took too long. Is there a loop that never stops?"
     if kind == "SyntaxError":

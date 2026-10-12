@@ -121,9 +121,9 @@ class _Select:
         t = self.tree
         if not isinstance(t, exp.Select):
             raise Unsupported("only SELECT queries can become blocks.", self.first)
-        for key in ("with", "offset", "windows", "qualify", "distinct_on"):
+        for key in ("with", "with_", "offset", "windows", "qualify", "distinct_on"):
             if t.args.get(key):
-                raise Unsupported(f"{key.upper()} isn't a block yet.", self.first)
+                raise Unsupported(f"{key.rstrip('_').upper()} isn't a block yet.", self.first)
         src = t.args.get("from_") or t.args.get("from")
         if src is None or not isinstance(src.this, exp.Table):
             raise Unsupported("FROM needs a table name (subqueries aren't blocks yet).",
@@ -340,6 +340,39 @@ class _Select:
         return b.agg(func, column, alias or ("n" if func == "count" and not column
                                              else f"{func}_{column}"))
 
+    def _like(self, e: exp.Expression, aggs, esc: str) -> Block:
+        """A LIKE / NOT LIKE node into a text block, honouring an ESCAPE character."""
+        pat = e.expression
+        if not (isinstance(pat, exp.Literal) and pat.is_string):
+            raise Unsupported("LIKE needs a text pattern.", self._line_with("like"))
+        toks: list[tuple[str, str]] = []  # ("wild", "%") | ("one", "_") | ("lit", ch)
+        p, i = pat.this, 0
+        while i < len(p):
+            c = p[i]
+            if esc and c == esc and i + 1 < len(p):
+                toks.append(("lit", p[i + 1]))
+                i += 2
+                continue
+            toks.append(({"%": "wild", "_": "one"}.get(c, "lit"), c))
+            i += 1
+        lead = bool(toks) and toks[0][0] == "wild"
+        trail = len(toks) > (1 if lead else 0) and toks[-1][0] == "wild"
+        mid = toks[1 if lead else 0: len(toks) - 1 if trail else len(toks)]
+        if any(k in ("wild", "one") for k, _ in mid):
+            raise Unsupported("LIKE patterns with % or _ in the middle aren't blocks yet.",
+                              self._line_with("like"))
+        col = self._expr(e.this, aggs)
+        core = "".join(ch for _, ch in mid)
+        if lead and trail:
+            block = b.text("contains", col, core)
+        elif trail:
+            block = b.text("starts", col, core)
+        elif lead:
+            block = b.text("ends", col, core)
+        else:
+            block = b.cmp("=", col, b.lit(core))
+        return b.not_(block) if e.args.get("negate") else block
+
     def _expr(self, e: exp.Expression, aggs: list[dict] | None = None) -> Block:
         t = type(e)
         if t is exp.Paren:
@@ -371,24 +404,15 @@ class _Select:
             if e.args.get("query"):
                 raise Unsupported("IN (SELECT ...) isn't a block yet.", self._line_with(" in "))
             return b.inlist(self._expr(e.this, aggs), vals)
+        if t is exp.Escape:
+            # "... LIKE pattern ESCAPE 'x'": decode with the given escape character
+            inner = e.this
+            esc = e.expression.this if isinstance(e.expression, exp.Literal) else "\\"
+            if not isinstance(inner, (exp.Like, exp.ILike)):
+                raise Unsupported("ESCAPE only works with LIKE here.", self._line_with("escape"))
+            return self._like(inner, aggs, esc)
         if t in (exp.Like, exp.ILike):
-            pat = e.expression
-            if not (isinstance(pat, exp.Literal) and pat.is_string):
-                raise Unsupported("LIKE needs a text pattern.", self._line_with("like"))
-            p = pat.this
-            core = p.strip("%")
-            if "%" in core or "_" in core:
-                raise Unsupported("LIKE patterns with % or _ in the middle aren't blocks yet.",
-                                  self._line_with("like"))
-            if p.startswith("%") and p.endswith("%") and len(p) >= 2:
-                op = "contains"
-            elif p.endswith("%"):
-                op = "starts"
-            elif p.startswith("%"):
-                op = "ends"
-            else:
-                return b.cmp("=", self._expr(e.this, aggs), b.lit(p))
-            return b.text(op, self._expr(e.this, aggs), core)
+            return self._like(e, aggs, "")
         if t in MATHS:
             right = self._expr(e.expression, aggs)
             if t is exp.Div and right.type == "lit" and isinstance(right.field("value"), float) \
@@ -396,7 +420,12 @@ class _Select:
                 right.fields["value"] = int(right.field("value"))
             return b.math(MATHS[t], self._expr(e.this, aggs), right)
         if t is exp.Cast:
-            return self._expr(e.this, aggs)
+            # we emit CAST(x AS REAL) for decimal division; unwrap that (the block keeps the
+            # division), but a cast that changes the value (to INTEGER, TEXT, ...) isn't a block
+            reals = {exp.DataType.Type.FLOAT, exp.DataType.Type.DOUBLE, exp.DataType.Type.DECIMAL}
+            if e.to.this in reals:
+                return self._expr(e.this, aggs)
+            raise Unsupported("CAST isn't a block yet.", self._line_with("cast"))
         if t is exp.Column:
             name = e.name
             return b.col(name)

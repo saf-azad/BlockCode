@@ -187,6 +187,16 @@ export function resultColumns(program: Program, name: string, tables: TableInfo[
   return [];
 }
 
+export function usedTables(program: Program): string[] {
+  const names: string[] = [];
+  for (const b of walk(program.blocks)) {
+    if ((b.type === 'from' || b.type === 'join') && b.fields.table && !names.includes(b.fields.table)) {
+      names.push(b.fields.table);
+    }
+  }
+  return names;
+}
+
 export function stackNames(program: Program): string[] {
   const names: string[] = [];
   for (const b of walk(program.blocks)) if (b.type === 'from') {

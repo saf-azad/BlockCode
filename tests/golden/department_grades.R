@@ -8,8 +8,8 @@ format: html
 #| message: false
 library(dplyr)
 library(readr)
-enrolments <- read_csv("data/enrolments.csv", show_col_types = FALSE)
-courses <- read_csv("data/courses.csv", show_col_types = FALSE)
+enrolments <- read_csv("data/enrolments.csv", show_col_types = FALSE, col_types = "?c?c")
+courses <- read_csv("data/courses.csv", show_col_types = FALSE, col_types = "ccc")
 ```
 
 ```{r}

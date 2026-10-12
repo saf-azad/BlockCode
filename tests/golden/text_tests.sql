@@ -1,3 +1,3 @@
 SELECT *
 FROM courses
-WHERE title LIKE '%ic%' OR dept LIKE 'his%';
+WHERE title LIKE '%ic%' ESCAPE '\' OR dept LIKE 'his%' ESCAPE '\';

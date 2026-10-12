@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from blockcode.codegen.emitter import Emitter, Generated
-from blockcode.codegen.expr import ATOM, ExprError, SqlRenderer, sql_ident
+from blockcode.codegen.expr import ATOM, ExprError, SqlRenderer, sql_ident, whole
 from blockcode.diagnostics import Diagnostic, error
 from blockcode.ir import Block, Program, TableInfo
 from blockcode.plan import Plan, build_plan, nullable
@@ -41,7 +41,9 @@ def generate_sql(program: Program, tables: dict[str, TableInfo]) -> Generated:
 
 
 def agg_sql(a: dict, render) -> str:
-    func = SQL_AGG.get(a.get("func"), str(a.get("func")).upper())
+    func = SQL_AGG.get(a.get("func"))
+    if func is None:  # the plan has already said why
+        raise ExprError("Pick a summary: count, sum, avg, min or max.")
     column = a.get("column")
     if not column:
         return f"{func}(*)"
@@ -52,13 +54,30 @@ def emit_select(em: Emitter, plan: Plan) -> None:
     derived = {d.field("name"): d for d in plan.derives}
     types = {c.name: c.type for c in plan.pre_group.values()}
 
+    resolving: set[str] = set()
+
     def resolve_pre(name: str) -> tuple[str, int] | None:
+        # a new column is inlined where a later clause names it, but a reference to the column
+        # being defined (score = score / 10) means the original column, so stop there
         d = derived.get(name)
-        if d is None:
+        if d is None or name in resolving:
             return None
-        return pre.render(d.inputs.get("expr"))
+        resolving.add(name)
+        try:
+            return pre.render(d.inputs.get("expr"))
+        finally:
+            resolving.discard(name)
 
     pre = SqlRenderer(resolve_pre, types)
+
+    def render_derive(d) -> str:
+        # the column being defined refers to the original column, so guard its own name
+        name = d.field("name")
+        resolving.add(name)
+        try:
+            return pre(d.inputs.get("expr"))
+        finally:
+            resolving.discard(name)
 
     def col_pre(name: str) -> str:
         got = resolve_pre(name)
@@ -70,10 +89,11 @@ def emit_select(em: Emitter, plan: Plan) -> None:
     if group:
         for key in group.field("by", []):
             d = derived.get(key)
-            text = f"{pre(d.inputs.get('expr'))} AS {sql_ident(key)}" if d else sql_ident(key)
+            text = f"{render_derive(d)} AS {sql_ident(key)}" if d else sql_ident(key)
             items.append((text, [group.id] + ([d.id] if d else [])))
         for a in group.field("aggs", []):
-            items.append((f"{agg_sql(a, col_pre)} AS {sql_ident(a.get('as', ''))}", [group.id]))
+            items.append((f"{agg_sql(a, col_pre)} AS {sql_ident(a.get('as') or '')}",
+                          [group.id]))
         if plan.select:
             keep = plan.select.field("columns", [])
             names = list(group.field("by", [])) + [a.get("as") for a in group.field("aggs", [])]
@@ -84,14 +104,30 @@ def emit_select(em: Emitter, plan: Plan) -> None:
         for c in plan.select.field("columns", []):
             d = derived.get(c)
             if d:
-                items.append((f"{pre(d.inputs.get('expr'))} AS {sql_ident(c)}",
+                items.append((f"{render_derive(d)} AS {sql_ident(c)}",
                               [plan.select.id, d.id]))
             else:
                 items.append((sql_ident(c), [plan.select.id]))
     else:
-        items.append(("*", [plan.block.id]))
-        for d in plan.derives:
-            items.append((f"{pre(d.inputs.get('expr'))} AS {sql_ident(d.field('name'))}", [d.id]))
+        by_name = {d.field("name"): d for d in plan.derives}
+        shadowed = set(by_name) & set(plan.source_cols)
+        if shadowed:
+            # a new column reuses an existing name: keep each source column in place, swapping
+            # in the new value where a derive overwrites it, so the result has one column of
+            # that name in the original order (as pandas and R do), not two
+            for c in plan.source_cols:
+                d = by_name.get(c)
+                if d is not None:
+                    items.append((f"{render_derive(d)} AS {sql_ident(c)}", [plan.block.id, d.id]))
+                else:
+                    items.append((sql_ident(c), [plan.block.id]))
+            for d in plan.derives:
+                if d.field("name") not in plan.source_cols:
+                    items.append((f"{render_derive(d)} AS {sql_ident(d.field('name'))}", [d.id]))
+        else:
+            items.append(("*", [plan.block.id]))
+            for d in plan.derives:
+                items.append((f"{render_derive(d)} AS {sql_ident(d.field('name'))}", [d.id]))
 
     for i, (text, blocks) in enumerate(items):
         lead = "SELECT " if i == 0 else "       "
@@ -113,7 +149,7 @@ def emit_select(em: Emitter, plan: Plan) -> None:
         for k in group.field("by", []):
             d = derived.get(k)
             # a new column used only for grouping isn't in the SELECT list, so repeat its sum
-            keys.append(pre(d.inputs.get("expr")) if d and shown is not None and k not in shown
+            keys.append(render_derive(d) if d and shown is not None and k not in shown
                         else sql_ident(k))
         em.emit("GROUP BY " + ", ".join(keys), group.id)
     if plan.having:
@@ -123,7 +159,8 @@ def emit_select(em: Emitter, plan: Plan) -> None:
             a = aggs.get(name)
             return (agg_sql(a, col_pre), ATOM) if a else None
 
-        em.emit("HAVING " + SqlRenderer(resolve_post)(plan.having.inputs.get("cond")),
+        post_types = {name: c.type for name, c in plan.columns.items()}
+        em.emit("HAVING " + SqlRenderer(resolve_post, post_types)(plan.having.inputs.get("cond")),
                 plan.having.id)
     if plan.order:
         parts = []
@@ -137,8 +174,9 @@ def emit_select(em: Emitter, plan: Plan) -> None:
             else:
                 parts.append(sql_ident(c))
         em.emit("ORDER BY " + ", ".join(parts), plan.order.id)
-    if plan.limit:
-        em.emit(f"LIMIT {plan.limit.field('n')}", plan.limit.id)
+    # a LIMIT that isn't a whole number is reported by the plan and left out of the code
+    if plan.limit and whole(plan.limit.field("n")) is not None:
+        em.emit(f"LIMIT {whole(plan.limit.field('n'))}", plan.limit.id)
     # close the statement
     text, blocks = em._lines[-1]
     em._lines[-1] = (text + ";", blocks)

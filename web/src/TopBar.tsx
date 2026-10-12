@@ -3,6 +3,7 @@ import { api } from './api';
 import { clearWorkspace } from './local';
 import { Confirm } from './Modal';
 import { useRun } from './panels/run';
+import { usedTables } from './ir';
 import { effectiveLang, storedTables, UNTITLED, useStore } from './store';
 import { LANG_LABEL } from './types';
 
@@ -23,7 +24,9 @@ export function TopBar() {
   const doExport = async () => {
     setExporting(true);
     try {
-      const blob = await api.export(state.program, lang, title || UNTITLED, storedTables(state));
+      const used = new Set(usedTables(state.program));
+      const tables = storedTables(state).filter((t) => used.has(t.info.name));
+      const blob = await api.export(state.program, lang, title || UNTITLED, tables);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       const stem = (title || UNTITLED).replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '').toLowerCase() || 'analysis';

@@ -41,6 +41,10 @@ def strip_quarto(gen: Generated) -> tuple[str, list[int]]:
 
 
 HARNESS = r'''
+# Compare and sort text by byte value, the way SQLite and pandas do, so the three targets agree
+# on filters like name > "M", on min()/max() of text, and on arrange(); without this R would
+# use the machine's locale collation and could order text differently.
+invisible(suppressWarnings(Sys.setlocale("LC_COLLATE", "C")))
 .bc_args <- commandArgs(trailingOnly = TRUE)
 .bc_out <- .bc_args[1]; .bc_names <- strsplit(.bc_args[2], ",")[[1]]
 .bc_src <- .bc_args[3]
@@ -52,7 +56,11 @@ print.ggplot <- function(x, ...) {
                   height = 4, dpi = 110)
   invisible(x)
 }
-.bc_exprs <- parse(.bc_src, keep.source = TRUE)
+.bc_exprs <- tryCatch(parse(.bc_src, keep.source = TRUE), error = function(e) {
+  writeLines(c("1", "1", "", conditionMessage(e)), file.path(.bc_out, "error.txt"))
+  NULL
+})
+if (is.null(.bc_exprs)) quit(save = "no", status = 1)
 .bc_err <- NULL
 for (.bc_e in seq_along(.bc_exprs)) {
   .bc_line <- getSrcLocation(.bc_exprs[.bc_e], "line")
@@ -134,6 +142,8 @@ def run_r(gen: Generated, project_dir: Path, names: list[str],
                                 "export it to run in RStudio.")
         return result
     code, nums = strip_quarto(gen)
+    # result names name the files the harness writes, so only plain R names are passed on
+    names = [n for n in names if re.fullmatch(r"[A-Za-z.][A-Za-z0-9._]*", n)]
     with tempfile.TemporaryDirectory(prefix="blockcode-r-") as tmp:
         tmpd = Path(tmp)
         (tmpd / "program.R").write_text(code, encoding="utf-8")
@@ -170,9 +180,14 @@ def run_r(gen: Generated, project_dir: Path, names: list[str],
                 kinds_file = tmpd / f"types_{n}.txt"
                 kinds = kinds_file.read_text().splitlines() if kinds_file.exists() else []
                 kind = lambda i: kinds[i] if i < len(kinds) else ""  # noqa: E731
+                header = rows[0] if rows else []
+                width = len(header)
+                # a one-column row that is a single empty value is a blank line, which
+                # csv.reader returns as [], so pad every short row back to the header width
                 result.tables.append(TableResult(
-                    name=n, columns=rows[0] if rows else [],
-                    rows=[[_cell(v, kind(i)) for i, v in enumerate(r)] for r in rows[1:]],
+                    name=n, columns=header,
+                    rows=[[_cell(v, kind(i)) for i, v in enumerate(r + [""] * (width - len(r)))]
+                          for r in rows[1:]],
                     total_rows=total))
         pngs = sorted(tmpd.glob("plot*.png"), key=lambda p: int(re.sub(r"\D", "", p.stem)))
         for png in pngs[:MAX_PLOTS]:
