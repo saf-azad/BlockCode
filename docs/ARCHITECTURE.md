@@ -55,6 +55,7 @@ between requests, so all of this works the same on a laptop as on a serverless h
 | `blockcode/plan.py` | From stack → relational plan, with column types tracked at every stage |
 | `blockcode/codegen/` | Plan → SQLite, pandas or dplyr (`.R` and Quarto `.qmd`), with a source map |
 | `blockcode/parse/` | SQL, Python and R → IR, plus `match.py`, which keeps block ids stable |
+| `blockcode/shape.py` | Checks a program is well formed (block types, kinds of setting, size) before any code is written |
 | `blockcode/validate.py`, `errors.py` | Per-language problems and plain-English error messages |
 | `blockcode/run/` | Runners for each language, and the subprocess limits in `sandbox.py` |
 | `blockcode/data_io.py` | Tidies an uploaded CSV, infers column types, loads it into SQLite |
@@ -91,8 +92,9 @@ Source → Join* → New column* → Where* → Group / Aggregate → Having →
 Steps are sorted into clause order first, and a warning is shown if they had to move. While
 building the plan, the engine tracks every column's name, type and whether it can be empty,
 stage by stage. That is how a dropdown knows which columns exist after a GROUP BY. It also catches
-mistakes before any code exists: a column that doesn't exist at that stage, a filter with no
-condition, a variable used inside a pipeline, or two GROUP BY blocks in one stack.
+mistakes before any code exists: a column that doesn't exist at that stage, text compared with a
+number, maths or a SUM on a text column, a filter with no condition, a variable used inside a
+pipeline, or two GROUP BY blocks in one stack.
 
 Each generator walks that same plan:
 
@@ -156,7 +158,12 @@ that type. The new block then takes the old block's id.
 
 ## Validation and friendly errors
 
-`validate.py` merges the problems reported while building the plan and generating code with
+The editor always sends well-formed programs, but the API accepts any JSON. So before anything
+else, `shape.py` checks every block: is it a known type, is each setting the right kind of value,
+and is the program a sensible size and depth? A malformed block becomes a problem, not a crash,
+and every value that reaches the generated code is a quoted literal or a checked identifier.
+
+`validate.py` then merges the problems reported while building the plan and generating code with
 checks of its own. For example, a variable used before it is set, or a name that isn't a valid
 Python identifier. Every problem is attached to a block id. The editor shows it in the Problems
 tab and outlines the block.
@@ -169,7 +176,7 @@ available underneath.
 
 | Language | How it runs | Wall-clock limit |
 | --- | --- | --- |
-| SQL | `sqlite3`, against a **read-only** connection (`?mode=ro`) | — |
+| SQL | `sqlite3`, against a **read-only** connection (`?mode=ro`); a progress handler stops it from inside, and it fetches 200 rows while counting the rest | 10 s |
 | Python | the exact exported script in a subprocess, inside a small harness | 10 s |
 | R | `Rscript`, when installed (Quarto chunks are extracted first) | 20 s |
 
@@ -272,7 +279,7 @@ The web app (`web/`) is React 19 + TypeScript, built with Vite.
 
 ## How it is tested
 
-The engine has over 340 tests. Most of them check that the three languages and the two directions
+The engine has nearly 400 tests. Most of them check that the three languages and the two directions
 agree with each other, more than checking any one output:
 
 | Suite | What it checks |
@@ -282,6 +289,8 @@ agree with each other, more than checking any one output:
 | `test_properties.py` | [Hypothesis](https://hypothesis.readthedocs.io) builds random pipelines (joins, nested conditions, groups, …) and checks both properties above |
 | `test_golden.py` | generated code for every example is checked in (`tests/golden/`), so changes show up in review |
 | `test_parse_handwritten.py` | code written by hand, not by BlockCode, still becomes the right blocks |
+| `test_cross_language.py` | edge cases found by exploratory testing to diverge (modulo, ties, LIKE escapes, empty join keys, …), pinned so they stay in step |
+| `test_hardening.py` | malformed or hostile programs become problems, never code: bad names, wrong-kind settings, huge or deep programs, runaway SQL |
 | `test_awkward_csvs.py` | messy real-world CSVs are tidied, and every language then reads the same table |
 | `test_explainers.py` | every hover animation shows what the engine really does (e.g. inner join 3 + 3 → 2 rows) |
 | `test_export.py` | exported files run on their own, outside BlockCode |
@@ -308,8 +317,8 @@ installed), the web build and unit tests, and the browser tests on every pull re
 
 Known differences between the languages, kept deliberately visible:
 
-- `NOT IN` on a column with empty values, and `SUM` over a group whose values are all empty,
-  follow SQL's rules in SQL, but pandas and R give different results.
+- `SUM` over a group whose values are all empty gives empty in SQL, but in some programs the
+  pandas code still gives 0. This is a known bug, and the property tests can find it.
 - A new column that a later GROUP BY or SELECT drops has no SQL of its own. The validator warns
   about this.
 

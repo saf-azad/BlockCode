@@ -85,7 +85,7 @@ pandas, and a small hand-written Pratt parser for R.
 
 ## Engineering highlights
 
-- **Correctness by cross-checking.** Over 340 engine tests, many of them checking that languages
+- **Correctness by cross-checking.** Nearly 400 engine tests, many of them checking that languages
   and directions agree with each other. [Hypothesis](https://hypothesis.readthedocs.io) generates
   random pipelines and asserts that `parse(generate(P))` regenerates identical code in every
   language, and that SQL and pandas return the same rows. Golden files cover every example, and
@@ -98,9 +98,11 @@ pandas, and a small hand-written Pratt parser for R.
 - **Stateless, privacy-first backend.** Runs and exports carry their (gzipped) CSVs. The server
   tidies them into a temporary folder, runs the code, and deletes everything. There's no
   database, nothing leaks between visitors, and it scales out on serverless hosts.
-- **Careful with untrusted code.** SQL runs on a read-only connection. Python and R run in
-  subprocesses with a clean environment and CPU, time, file-size and output limits. Running
-  free-typed code is off by default on public deployments.
+- **Careful with untrusted code.** Every program is shape-checked before any code is written,
+  and every value from a block reaches the code as a quoted literal or a checked identifier. SQL
+  runs on a read-only, time-limited connection. Python and R run in subprocesses with a clean
+  environment and CPU, time, file-size and output limits. Running free-typed code is off by
+  default on public deployments.
 
 ## Tech stack
 
@@ -179,8 +181,8 @@ takes. Vercel has no R, so there the R tab shows and exports code but can't run 
 
 ## Limits and safety
 
-- A CSV can be up to 10 MB. Results show the first 200 rows. Python stops after 10 seconds and R
-  after 20. A run returns at most 12 plots and 100,000 characters of output.
+- A CSV can be up to 10 MB. Results show the first 200 rows. SQL and Python stop after 10
+  seconds, and R after 20. A run returns at most 12 plots and 100,000 characters of output.
 - Code typed in the Python or R tab can include lines that aren't blocks. Running those means
   running arbitrary code on the server, so `/api/run` refuses programs with a Code block unless
   `BLOCKCODE_ALLOW_RAW_CODE=1` is set. Only set it on a trusted or sandboxed host. Programs

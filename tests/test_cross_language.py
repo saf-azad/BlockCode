@@ -2,13 +2,11 @@
 were found by exploratory testing to diverge, and are kept here so they stay in step."""
 
 import sqlite3
-import tempfile
 from pathlib import Path
 
 import pytest
 
 from blockcode import build as b
-from blockcode.codegen import generate
 from blockcode.data_io import add_table
 from blockcode.engine import run_in
 from blockcode.parse import parse_code
@@ -96,7 +94,7 @@ def test_sort_ties_same_order(tmp_path):
 
 def test_like_special_characters_match(tmp_path):
     d, db, tables = workspace(tmp_path, "t",
-                              "label\n50% off\nSKU_1\nSKU_2\nplain\nhalf%\n".encode())
+                              b"label\n50% off\nSKU_1\nSKU_2\nplain\nhalf%\n")
     for op, val in [("contains", "50%"), ("contains", "_"), ("starts", "SKU_"), ("ends", "%")]:
         prog = b.program(b.from_("t", b.where(b.text(op, b.col("label"), val))))
         res = results(d, tables, prog)
@@ -117,7 +115,7 @@ def test_r_keeps_text_columns_as_text(tmp_path):
     if "r" not in TARGETS:
         pytest.skip("R isn't installed")
     d, db, tables = workspace(tmp_path, "t",
-                              'code,when\n"1,5",14:30\n"2,25",09:05\n'.encode())
+                              b'code,when\n"1,5",14:30\n"2,25",09:05\n')
     assert tables[0].column("code").type == "text"
     prog = b.program(b.from_("t", b.where(b.cmp("=", b.col("code"), b.lit("1,5")))))
     res = results(d, tables, prog)
@@ -167,8 +165,12 @@ PETS_T = None
 def _pets_table():
     import sqlite3 as s3
     import tempfile as tf
+
     from blockcode.data_io import add_table
-    d = Path(tf.mkdtemp()); db = d / "db.sqlite"; s3.connect(db).close()
+
+    d = Path(tf.mkdtemp())
+    db = d / "db.sqlite"
+    s3.connect(db).close()
     info, _ = add_table(d, db, "pets.csv", b"name,age\nRex,3\nTom,5\n", name="pets")
     return info
 

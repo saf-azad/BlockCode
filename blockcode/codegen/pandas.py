@@ -7,8 +7,7 @@ follow SQL's rules: a row whose value is empty is never kept by a filter.
 from __future__ import annotations
 
 from blockcode.codegen.emitter import Emitter
-from blockcode.codegen.expr import (ExprError, PandasRenderer, checked_name, py_kwarg, py_str,
-                                    whole)
+from blockcode.codegen.expr import ExprError, PandasRenderer, checked_name, py_kwarg, py_str, whole
 from blockcode.ir import TableInfo
 from blockcode.plan import Plan
 
