@@ -8,6 +8,7 @@ runner.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import signal
 import subprocess
@@ -54,10 +55,8 @@ def limits(cpu_seconds: float):
 
     def apply() -> None:
         for which, pair in caps:
-            try:
+            with contextlib.suppress(ValueError, OSError):
                 resource.setrlimit(which, pair)
-            except (ValueError, OSError):
-                pass
 
     return apply
 

@@ -17,10 +17,10 @@ import re
 import sqlite3
 import zipfile
 import zlib
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Iterator
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, Response
@@ -197,10 +197,9 @@ def create_app() -> FastAPI:
     def gen_all(body: GenerateIn) -> dict:
         """Code, source map and problems for every language at once (the editor shows the
         hovered block in all three)."""
-        from blockcode.validate import validate
-
         from blockcode.codegen.emitter import Generated
         from blockcode.diagnostics import error
+        from blockcode.validate import validate
 
         tables = {t.name: t for t in body.tables}
         out = {}

@@ -62,7 +62,7 @@ def test_inspect_reads_types_and_empties():
 
 def test_inspect_tidies_awkward_files():
     c = client()
-    semi = "city;country;population\nParis;France;2148000\nLyon;France;513000\n".encode()
+    semi = b"city;country;population\nParis;France;2148000\nLyon;France;513000\n"
     r = c.post("/api/tables", files={"file": ("Cities 2024.csv", semi, "text/csv")}).json()
     assert r["table"]["name"] == "cities_2024"
     assert [x["name"] for x in r["table"]["columns"]] == ["city", "country", "population"]

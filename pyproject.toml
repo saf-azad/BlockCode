@@ -43,3 +43,26 @@ build = "npm --prefix web ci && npm --prefix web run build -- --outDir ../public
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM"]
+ignore = [
+    "E501",   # long lines: left to judgement (generated-code templates read better unwrapped)
+    "B905",   # zip(strict=...) would change behaviour, not just style
+    "UP031",  # the runner harnesses are %-formatted so the R/Python braces inside stay literal
+    "SIM300", # Pratt-parser binding powers read naturally as `BP > min_bp`
+    "SIM905", # the SQL reserved-word list is clearer as one string than a 100-item literal
+    "UP035",  # typing.Callable and friends still work; not worth the churn on its own
+]
+
+[tool.ruff.lint.per-file-ignores]
+# The `kind` lambda is only called within the loop iteration that defines it.
+"blockcode/run/r_runner.py" = ["B023"]
+
+[tool.ruff.lint.flake8-bugbear]
+# Typer and FastAPI declare parameters with calls in defaults by design.
+extend-immutable-calls = ["typer.Option", "typer.Argument", "fastapi.File", "fastapi.Form"]
