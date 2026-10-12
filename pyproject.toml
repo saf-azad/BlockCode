@@ -5,6 +5,19 @@ description = "Scratch-style blocks for learning SQL, Python (pandas) and R (dpl
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
+authors = [{ name = "saf-azad" }]
+keywords = ["education", "visual-programming", "sql", "pandas", "dplyr", "code-generation"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Education",
+    "Framework :: FastAPI",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Education",
+    "Topic :: Software Development :: Code Generators",
+]
 dependencies = [
     "fastapi>=0.115",
     "uvicorn>=0.30",
@@ -16,6 +29,11 @@ dependencies = [
     "python-multipart>=0.0.9",
 ]
 
+[project.urls]
+Homepage = "https://blockcode-psi.vercel.app"
+Repository = "https://github.com/saf-azad/BlockCode"
+Documentation = "https://github.com/saf-azad/BlockCode/blob/main/docs/ARCHITECTURE.md"
+
 [project.scripts]
 blockcode = "blockcode.cli:app"
 
@@ -24,6 +42,7 @@ dev = [
     "pytest>=8",
     "hypothesis>=6.100",
     "httpx>=0.27",
+    "ruff>=0.15",
 ]
 
 [build-system]
