@@ -11,5 +11,5 @@ out = out.groupby("dept", as_index=False, dropna=False).agg(
     n=("student_id", "size"),
 )
 out = out[out["n"] >= 10]
-out = out.sort_values("avg_grade", ascending=False)
+out = out.sort_values("avg_grade", ascending=False, kind="stable")
 out = out.head(5)

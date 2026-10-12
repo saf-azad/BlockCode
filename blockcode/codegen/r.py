@@ -5,8 +5,10 @@ Pipelines are one ``|>`` chain with one verb per block, so each line maps back t
 
 from __future__ import annotations
 
+import re
+
 from blockcode.codegen.emitter import Emitter, Generated
-from blockcode.codegen.expr import ExprError, RRenderer, py_str, r_ident
+from blockcode.codegen.expr import ExprError, RRenderer, one_line, py_str, r_ident, r_name, whole
 from blockcode.diagnostics import Diagnostic, error
 from blockcode.ir import Block, Program, TableInfo
 from blockcode.plan import Plan, build_plan
@@ -29,8 +31,15 @@ def _agg_r(a: dict) -> str:
         "sum": f"sum({c}, na.rm = TRUE)",
         "min": f"min({c}, na.rm = TRUE)",
         "max": f"max({c}, na.rm = TRUE)",
-    }.get(func, f"{func}({c})")
-    return f"{r_ident(a.get('as', ''))} = {expr}"
+    }.get(func)
+    if expr is None:  # the plan has already said why
+        raise ExprError("Pick a summary: count, sum, avg, min or max.")
+    return f"{r_ident(a.get('as') or '')} = {expr}"
+
+
+def chunk_label(name: str) -> str:
+    """A Quarto chunk label: letters, digits and dashes only."""
+    return re.sub(r"[^A-Za-z0-9-]+", "-", name).strip("-") or "out"
 
 
 class _RGen:
@@ -99,8 +108,20 @@ class _RGen:
             loaded.add(table)
             info = self.tables.get(table)
             path = info.file if info else f"data/{table}.csv"
-            self.em.emit(f"{r_ident(table)} <- read_csv({py_str(path)}, show_col_types = FALSE)",
-                         b.id)
+            # keep the column types found at upload: readr would otherwise re-guess and read
+            # text like "1,5", "14:30" or "2023-01-02" as a number, time or date, so the R
+            # result would differ from SQL and pandas. "c" forces text; "?" lets readr guess.
+            coltypes = ""
+            if info:
+                coltypes = "".join("c" if c.type == "text" else "?" for c in info.columns)
+            spec = f", col_types = {py_str(coltypes)}" if coltypes and set(coltypes) != {"?"} else ""
+            try:
+                line = (f"{r_name(table, b.id)} <- read_csv({py_str(path)}, show_col_types = FALSE"
+                        f"{spec})")
+            except ExprError as exc:
+                self.diags.append(error(str(exc), b.id, target="r"))
+                continue
+            self.em.emit(line, b.id)
 
     def flush(self, chunk: list[Block]) -> None:
         if chunk:
@@ -112,7 +133,7 @@ class _RGen:
         if self.quarto:
             em.emit("```{r}")
             if first.type == "from":
-                em.emit(f"#| label: {first.field('name') or 'out'}".replace("_", "-"))
+                em.emit(f"#| label: {chunk_label(first.field('name') or 'out')}")
             elif first.type == "plot":
                 self.fig += 1
                 em.emit(f"#| label: fig-{self.fig}", first.id)
@@ -135,7 +156,7 @@ class _RGen:
                 self.stmt(b)
             except ExprError as exc:
                 self.diags.append(error(str(exc), exc.block_id or b.id, target="r"))
-                self.em.emit(f"# {b.type}: {exc}", b.id)
+                self.em.emit(f"# {one_line(f'{b.type}: {exc}')}", b.id)
 
     def body(self, b: Block, name: str) -> None:
         self.em.depth += 1
@@ -147,9 +168,9 @@ class _RGen:
         if t == "from":
             self.pipeline(self.plans.get(b.id) or build_plan(b, self.tables))
         elif t == "setvar":
-            em.emit(f"{r_ident(b.field('name'))} <- {e(b.inputs.get('value'))}", b.id)
+            em.emit(f"{r_name(b.field('name'), b.id)} <- {e(b.inputs.get('value'))}", b.id)
         elif t == "changevar":
-            name = r_ident(b.field("name"))
+            name = r_name(b.field("name"), b.id)
             em.emit(f"{name} <- {name} + {e(b.inputs.get('by'))}", b.id)
         elif t == "print":
             from blockcode.codegen.python import print_args
@@ -159,9 +180,9 @@ class _RGen:
             em.emit(f"print({inner})", b.id)
         elif t == "foreach":
             over = b.inputs.get("over")
-            var = r_ident(b.field("var") or "row")
+            var = r_name(b.field("var") or "row", b.id)
             if over is not None and over.type == "var":
-                data = r_ident(over.field("name"))
+                data = r_name(over.field("name"), b.id)
                 em.emit(f"for (i in seq_len(nrow({data}))) {{", b.id)
                 em.depth += 1
                 em.emit(f"{var} <- {data}[i, ]", b.id)
@@ -171,8 +192,8 @@ class _RGen:
             self.body(b, "body")
             em.emit("}", b.id)
         elif t == "repeat":
-            em.emit(f"for ({r_ident(b.field('var') or 'i')} in seq_len({e(b.inputs.get('times'))})"
-                    f" - 1) {{", b.id)
+            var = r_name(b.field("var") or "i", b.id)
+            em.emit(f"for ({var} in seq_len({e(b.inputs.get('times'))}) - 1) {{", b.id)
             self.body(b, "body")
             em.emit("}", b.id)
         elif t == "if":
@@ -199,16 +220,19 @@ class _RGen:
             raise ExprError(f'"{t}" can\'t be used as a step on its own.', b.id)
 
     def plot(self, b: Block) -> None:
-        chart, data = b.field("chart", "bar"), r_ident(b.field("data") or "out")
+        chart, data = b.field("chart", "bar"), r_name(b.field("data") or "out", b.id)
         x, y = b.field("x"), b.field("y")
         if not x:
             raise ExprError("Pick a column for the plot.", b.id)
         if chart == "hist":
+            bins = whole(b.field("bins") or 5)
+            if not bins:
+                raise ExprError("The number of bins needs to be a whole number.", b.id)
             self.em.emit(f"ggplot({data}, aes(x = {r_ident(x)})) +", b.id)
-            self.em.emit(f"  geom_histogram(bins = {int(b.field('bins') or 5)})", b.id)
+            self.em.emit(f"  geom_histogram(bins = {bins})", b.id)
             return
         if chart not in GEOMS:
-            raise ExprError(f'"{chart}" is not a chart type.', b.id)
+            raise ExprError("Pick a chart type: bar, line, scatter or hist.", b.id)
         if not y:
             raise ExprError("Pick a column for the y axis.", b.id)
         self.em.emit(f"ggplot({data}, aes(x = {r_ident(x)}, y = {r_ident(y)})) +", b.id)
@@ -221,7 +245,13 @@ class _RGen:
         verbs: list[tuple[str, str]] = []
         for j in plan.joins:
             fn = "left_join" if j.field("how") == "left" else "inner_join"
-            verbs.append((f"{fn}({r_ident(j.field('table'))}, by = {py_str(j.field('on'))})", j.id))
+            right = r_name(j.field("table"), j.id)
+            key = str(j.field("on"))
+            info = self.tables.get(j.field("table"))
+            col = info.column(key) if info else None
+            # dplyr matches NA keys by default; SQL never does, so turn that off for an empty key
+            na = ', na_matches = "never"' if col is not None and col.empty > 0 else ""
+            verbs.append((f"{fn}({right}, by = {py_str(key)}{na})", j.id))
         for d in plan.derives:
             verbs.append((f"mutate({r_ident(d.field('name'))} = {e(d.inputs.get('expr'))})", d.id))
         for w in plan.wheres:
@@ -251,10 +281,11 @@ class _RGen:
             keys = [f"desc({r_ident(k['column'])})" if k.get("desc") else r_ident(k["column"])
                     for k in plan.order.field("keys", [])]
             verbs.append((f"arrange({', '.join(keys)})", plan.order.id))
-        if plan.limit:
-            verbs.append((f"slice_head(n = {plan.limit.field('n')})", plan.limit.id))
+        # a LIMIT that isn't a whole number is reported by the plan and left out of the code
+        if plan.limit and whole(plan.limit.field("n")) is not None:
+            verbs.append((f"slice_head(n = {whole(plan.limit.field('n'))})", plan.limit.id))
 
-        head = f"{r_ident(plan.name)} <- {r_ident(plan.table)}"
+        head = f"{r_name(plan.name, plan.block.id)} <- {r_name(plan.table, plan.block.id)}"
         if not verbs:
             self.em.emit(head, plan.block.id)
             return

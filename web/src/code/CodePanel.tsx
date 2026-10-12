@@ -3,7 +3,7 @@ import { sql, SQLite } from '@codemirror/lang-sql';
 import { HighlightStyle, StreamLanguage, syntaxHighlighting } from '@codemirror/language';
 import { r as rMode } from '@codemirror/legacy-modes/mode/r';
 import { linter, lintGutter, setDiagnostics, type Diagnostic as CmDiagnostic } from '@codemirror/lint';
-import { Annotation, Compartment, EditorState, RangeSetBuilder, StateEffect, StateField } from '@codemirror/state';
+import { Annotation, Compartment, EditorState, RangeSetBuilder, StateEffect, StateField, Transaction } from '@codemirror/state';
 import { Decoration, EditorView, keymap, lineNumbers, placeholder, type DecorationSet } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { tags as t } from '@lezer/highlight';
@@ -136,7 +136,7 @@ export function CodePanel() {
     if (!v) return;
     const cur = v.state.doc.toString();
     if (cur !== text) {
-      v.dispatch({ changes: { from: 0, to: cur.length, insert: text }, annotations: External.of(true) });
+      v.dispatch({ changes: { from: 0, to: cur.length, insert: text }, annotations: [External.of(true), Transaction.addToHistory.of(false)] });
     }
   }, [text]);
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from blockcode.codegen.expr import whole
 from blockcode.diagnostics import Diagnostic, error, warning
 from blockcode.ir import Block, TableInfo
 from blockcode.registry import SPECS, STEP_ORDER
@@ -36,6 +37,8 @@ class Plan:
     select: Block | None = None
     order: Block | None = None
     limit: Block | None = None
+    # column names from the source and joins, before any new column is added
+    source_cols: list[str] = field(default_factory=list)
     # columns visible to Where/Derive (before grouping) and after the whole pipeline
     pre_group: dict[str, Col] = field(default_factory=dict)
     post_group: dict[str, Col] = field(default_factory=dict)
@@ -133,16 +136,37 @@ def build_plan(src: Block, tables: dict[str, TableInfo]) -> Plan:
                              "GROUP BY, "
                              "HAVING, SELECT, ORDER BY, LIMIT).", src.id))
 
-    def check(expr: Block | None, scope: dict[str, Col], owner: Block, where: str) -> None:
+    def check(expr: Block | None, scope: dict[str, Col], owner: Block, where: str,
+              boolean: bool = False) -> None:
         if expr is None:
             diags.append(error(f"{_label(owner)} needs a condition.", owner.id))
             return
+        bad = False
         for b in expr.walk():
             if b.type == "col" and plan.known and b.field("name") not in scope:
                 diags.append(error(f'"{b.field("name")}" is not a column {where}.', owner.id))
+                bad = True
             elif b.type in ("var", "field"):
                 diags.append(error(f"{_label(owner)} can only use columns, not variables.",
                                    owner.id))
+                bad = True
+        if bad or not plan.known:
+            return
+        # text and numbers can't be mixed, and a filter needs a test, not a bare value
+        for x in expr.walk():
+            if x.type == "math" and any(expr_type(x.inputs.get(s), scope).type == "text"
+                                        for s in ("a", "b")):
+                diags.append(error("Maths needs numbers, not text.", owner.id))
+                return
+            if x.type == "cmp":
+                sides = {expr_type(x.inputs.get(s), scope).type for s in ("a", "b")}
+                if "text" in sides and sides & {"int", "float"}:
+                    diags.append(error("This compares text with a number. Compare text with "
+                                       "text, or numbers with numbers.", owner.id))
+                    return
+        if boolean and expr_type(expr, scope).type not in ("bool", "any"):
+            diags.append(error(f"{_label(owner)} needs a test, like a comparison or "
+                               '"is empty", not just a value.', owner.id))
 
     pre_group_set = False
     for b in ordered:
@@ -178,9 +202,11 @@ def build_plan(src: Block, tables: dict[str, TableInfo]) -> Plan:
                     cols[c.name] = Col(c.name, c.type, c.empty > 0 or how == "left")
             plan.joins.append(b)
         elif b.type == "where":
-            check(b.inputs.get("cond"), cols, b, "here")
+            check(b.inputs.get("cond"), cols, b, "here", boolean=True)
             plan.wheres.append(b)
         elif b.type == "derive":
+            if not plan.source_cols:
+                plan.source_cols = list(cols)
             name = b.field("name")
             if not name:
                 diags.append(error("Give the new column a name.", b.id))
@@ -202,6 +228,10 @@ def build_plan(src: Block, tables: dict[str, TableInfo]) -> Plan:
                     diags.append(error(f"{a.get('func')} needs a column.", b.id))
                 if a.get("column") and plan.known and a["column"] not in cols:
                     diags.append(error(f'"{a["column"]}" is not a column here.', b.id))
+                elif (a.get("func") in ("sum", "avg") and a.get("column")
+                      and cols.get(a["column"]) and cols[a["column"]].type == "text"):
+                    diags.append(error(f'{a.get("func")} needs a number column, not text like '
+                                       f'"{a["column"]}". Try count instead.', b.id))
                 if not a.get("as"):
                     diags.append(error("Give each summary a name.", b.id))
                 new[a.get("as", "")] = _agg_col(a, cols)
@@ -212,7 +242,7 @@ def build_plan(src: Block, tables: dict[str, TableInfo]) -> Plan:
         elif b.type == "having":
             if plan.group is None:
                 diags.append(error("HAVING needs a Group by block above it.", b.id))
-            check(b.inputs.get("cond"), cols, b, "after grouping")
+            check(b.inputs.get("cond"), cols, b, "after grouping", boolean=True)
             plan.having = b
         elif b.type == "select":
             chosen = b.field("columns", [])
@@ -232,11 +262,12 @@ def build_plan(src: Block, tables: dict[str, TableInfo]) -> Plan:
                     diags.append(error(f'"{k.get("column")}" is not a column here.', b.id))
             plan.order = b
         elif b.type == "limit":
-            n = b.field("n")
-            if not isinstance(n, int) or isinstance(n, bool) or n < 0:
+            if whole(b.field("n")) is None:
                 diags.append(error("LIMIT needs a whole number of rows.", b.id))
             plan.limit = b
 
+    if not plan.source_cols:
+        plan.source_cols = list(cols)
     if not pre_group_set:
         plan.pre_group = dict(cols)
     used = None

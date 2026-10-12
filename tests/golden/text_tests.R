@@ -9,7 +9,7 @@ format: html
 library(dplyr)
 library(readr)
 library(stringr)
-courses <- read_csv("data/courses.csv", show_col_types = FALSE)
+courses <- read_csv("data/courses.csv", show_col_types = FALSE, col_types = "ccc")
 ```
 
 ```{r}

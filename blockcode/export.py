@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 import shutil
+import sqlite3
 from pathlib import Path
 
 from blockcode.codegen import generate
@@ -46,12 +47,20 @@ def export_files(workdir: Path, db: Path, table_list: list[TableInfo], program: 
             raise ProjectError("This program uses blocks that have no SQL version.")
         path = out / f"{stem}.sql"
         path.write_text(gen.code, encoding="utf-8")
+        # a fresh database with only the tables the query reads, not the whole workspace
         dest = out / "db.sqlite"
-        shutil.copy(db, dest)
+        sqlite3.connect(dest).close()
+        from blockcode.data_io import ingest
+
+        for name in used_tables(program):
+            info = tables.get(name)
+            if info and (workdir / info.file).exists():
+                ingest(workdir / info.file, workdir, dest, name)
         return [path, dest]
     if target == "python":
         path = out / f"{stem}.py"
-        path.write_text(generate(program, tables, "python").code, encoding="utf-8")
+        path.write_text(generate(program, tables, "python", show_results=True).code,
+                        encoding="utf-8")
         written.append(path)
     elif target == "r":
         path = out / f"{stem}.R"

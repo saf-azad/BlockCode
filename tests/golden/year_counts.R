@@ -8,7 +8,7 @@ format: html
 #| message: false
 library(dplyr)
 library(readr)
-students <- read_csv("data/students.csv", show_col_types = FALSE)
+students <- read_csv("data/students.csv", show_col_types = FALSE, col_types = "?c?")
 ```
 
 ```{r}
