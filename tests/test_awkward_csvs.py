@@ -62,7 +62,7 @@ def norm(rows):
 
 def programs(t):
     # (a column that is entirely empty sums to empty in SQL but 0 in pandas and R; see
-    # "Known limits" in docs/PLAN.md)
+    # "Limits and next steps" in docs/ARCHITECTURE.md)
     num = [c.name for c in t.columns if c.type in ("int", "float") and c.empty < t.rows]
     txt = [c.name for c in t.columns if c.type == "text"]
     out = {"limit": b.program(b.from_(t.name, b.limit(3))),

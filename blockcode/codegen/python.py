@@ -3,8 +3,15 @@
 from __future__ import annotations
 
 from blockcode.codegen.emitter import Emitter, Generated
-from blockcode.codegen.expr import (ExprError, PyRenderer, checked_name, name_problem,
-                                    one_line, py_str, whole)
+from blockcode.codegen.expr import (
+    ExprError,
+    PyRenderer,
+    checked_name,
+    name_problem,
+    one_line,
+    py_str,
+    whole,
+)
 from blockcode.codegen.pandas import emit_pipeline
 from blockcode.diagnostics import Diagnostic, error
 from blockcode.ir import Block, Program, TableInfo

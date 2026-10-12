@@ -32,7 +32,7 @@ def _load(store: ProjectStore, name: str, program_file: Path | None):
         project = store.load(name)
     except ProjectError as exc:
         typer.echo(str(exc), err=True)
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
     if program_file:
         from pydantic import ValidationError
 
@@ -42,7 +42,7 @@ def _load(store: ProjectStore, name: str, program_file: Path | None):
             text = program_file.read_text()
         except OSError as exc:
             typer.echo(f"Can't read {program_file}: {exc.strerror or exc}", err=True)
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
         try:
             project.program = Project.model_validate_json(text).program
         except ValidationError:
@@ -50,7 +50,7 @@ def _load(store: ProjectStore, name: str, program_file: Path | None):
                 project.program = Program.model_validate_json(text)
             except ValidationError:
                 typer.echo(f"{program_file} isn't a BlockCode program or project file.", err=True)
-                raise typer.Exit(1)
+                raise typer.Exit(1) from None
     return project
 
 
@@ -69,7 +69,7 @@ def new(name: str, projects_dir: Path = PROJECTS,
         p = ProjectStore(projects_dir).create(name, sample=not empty)
     except ProjectError as exc:
         typer.echo(str(exc), err=True)
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
     typer.echo(f"Created {projects_dir / p.name} with tables: "
                f"{', '.join(t.name for t in p.tables) or '(none)'}")
 
@@ -81,12 +81,12 @@ def import_csv(name: str, csv: Path, projects_dir: Path = PROJECTS) -> None:
         content = csv.read_bytes()
     except OSError as exc:
         typer.echo(f"Can't read {csv}: {exc.strerror or exc}", err=True)
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
     try:
         info = ProjectStore(projects_dir).add_csv(name, csv.name, content)
     except ProjectError as exc:
         typer.echo(str(exc), err=True)
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
     typer.echo(f"Loaded {info.name}: {info.rows} rows")
     for c in info.columns:
         typer.echo(f"  {c.name:<20} {c.type:<6} {c.empty} empty" if c.empty else
@@ -158,7 +158,7 @@ def export(name: str, target: str = TARGET, projects_dir: Path = PROJECTS,
         files = export_project(store, project, _check_target(target), out)
     except ProjectError as exc:
         typer.echo(str(exc), err=True)
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
     for f in files:
         typer.echo(f"wrote {f}")
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from blockcode.codegen.emitter import Emitter, Generated
 from blockcode.codegen.expr import ATOM, ExprError, SqlRenderer, sql_ident, whole
 from blockcode.diagnostics import Diagnostic, error
-from blockcode.ir import Block, Program, TableInfo
+from blockcode.ir import Program, TableInfo
 from blockcode.plan import Plan, build_plan, nullable
 from blockcode.registry import SPECS
 

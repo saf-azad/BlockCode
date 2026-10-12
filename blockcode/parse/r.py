@@ -373,9 +373,7 @@ def _int(n: N | None) -> int:
 def _names(nodes: list[N]) -> list[str]:
     out = []
     for n in nodes:
-        if n.kind == "name":
-            out.append(n.value)
-        elif n.kind == "str":
+        if n.kind in ("name", "str"):
             out.append(n.value)
         else:
             raise Unsupported("expected column names here", n.line)

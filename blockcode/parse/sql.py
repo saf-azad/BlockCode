@@ -152,10 +152,7 @@ class _Select:
             if type(node) in AGGS:
                 aggs.append(self._agg(node, alias))
                 order_names.append(aggs[-1]["as"])
-            elif isinstance(node, exp.Column) and not alias:
-                plain.append(node.name)
-                order_names.append(node.name)
-            elif isinstance(node, exp.Column) and alias == node.name:
+            elif isinstance(node, exp.Column) and (not alias or alias == node.name):
                 plain.append(node.name)
                 order_names.append(node.name)
             else:

@@ -5,6 +5,19 @@ description = "Scratch-style blocks for learning SQL, Python (pandas) and R (dpl
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
+authors = [{ name = "saf-azad" }]
+keywords = ["education", "visual-programming", "sql", "pandas", "dplyr", "code-generation"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Education",
+    "Framework :: FastAPI",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Education",
+    "Topic :: Software Development :: Code Generators",
+]
 dependencies = [
     "fastapi>=0.115",
     "uvicorn>=0.30",
@@ -16,6 +29,11 @@ dependencies = [
     "python-multipart>=0.0.9",
 ]
 
+[project.urls]
+Homepage = "https://blockcode-psi.vercel.app"
+Repository = "https://github.com/saf-azad/BlockCode"
+Documentation = "https://github.com/saf-azad/BlockCode/blob/main/docs/ARCHITECTURE.md"
+
 [project.scripts]
 blockcode = "blockcode.cli:app"
 
@@ -24,6 +42,7 @@ dev = [
     "pytest>=8",
     "hypothesis>=6.100",
     "httpx>=0.27",
+    "ruff>=0.15",
 ]
 
 [build-system]
@@ -43,3 +62,26 @@ build = "npm --prefix web ci && npm --prefix web run build -- --outDir ../public
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM"]
+ignore = [
+    "E501",   # long lines: left to judgement (generated-code templates read better unwrapped)
+    "B905",   # zip(strict=...) would change behaviour, not just style
+    "UP031",  # the runner harnesses are %-formatted so the R/Python braces inside stay literal
+    "SIM300", # Pratt-parser binding powers read naturally as `BP > min_bp`
+    "SIM905", # the SQL reserved-word list is clearer as one string than a 100-item literal
+    "UP035",  # typing.Callable and friends still work; not worth the churn on its own
+]
+
+[tool.ruff.lint.per-file-ignores]
+# The `kind` lambda is only called within the loop iteration that defines it.
+"blockcode/run/r_runner.py" = ["B023"]
+
+[tool.ruff.lint.flake8-bugbear]
+# Typer and FastAPI declare parameters with calls in defaults by design.
+extend-immutable-calls = ["typer.Option", "typer.Argument", "fastapi.File", "fastapi.Form"]

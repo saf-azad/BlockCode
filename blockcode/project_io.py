@@ -11,7 +11,7 @@ import re
 import shutil
 from pathlib import Path
 
-from blockcode.data_io import CsvError, add_table, ingest, table_name_for
+from blockcode.data_io import CsvError, add_table, ingest
 from blockcode.ir import Program, Project, TableInfo
 
 SAMPLE_DIR = Path(__file__).resolve().parent / "data" / "sample"

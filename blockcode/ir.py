@@ -12,8 +12,9 @@ Data pipelines are a ``from`` block whose ``steps`` stack holds the clause block
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from itertools import count
-from typing import Any, Iterator
+from typing import Any
 
 from pydantic import BaseModel, Field
 
